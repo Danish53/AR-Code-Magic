@@ -19,13 +19,13 @@ export const generateQrCodes = asyncErrors(async (req, res, next) => {
       orientation,
       reference_name,
       content,
-      user_id,
+      user_id = 1,
       url,
       password,
       tracking_pixel,
       custom_page,
     } = req.body;
-    if (!type_name || !user_id || !ar_type) {
+    if (!type_name || !ar_type) {
       return next(new ErrorHandler("Required fields are missing", 400));
     }
     const user = await Users.findOne({ where: { id: user_id } });

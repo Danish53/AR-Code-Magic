@@ -29,9 +29,9 @@ export const generateQrCodes = asyncErrors(async (req, res, next) => {
       return next(new ErrorHandler("Required fields are missing", 400));
     }
     const user = await Users.findOne({ where: { id: user_id } });
-    if (!user) {
-      return next(new ErrorHandler("User not found", 404));
-    }
+    // if (!user) {
+    //   return next(new ErrorHandler("User not found", 404));
+    // }
 
     const generatedUuid = uuid();
     const qrCodeUrl = `${process.env.BASE_URL || ""}/ar-text/${generatedUuid}`;

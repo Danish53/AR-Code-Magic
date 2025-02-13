@@ -2,7 +2,7 @@ import QRCode from "qrcode";
 import { v4 as uuid } from "uuid";
 import { asyncErrors } from "../middleware/asyncErrors.js";
 import ErrorHandler from "../middleware/error.js";
-// import { Users } from "../model/user.model.js";
+import { Users } from "../model/user.model.js";
 import { ArTypes } from "../model/arTypes.model.js";
 
 // Create QR Code
@@ -19,19 +19,19 @@ export const generateQrCodes = asyncErrors(async (req, res, next) => {
       orientation,
       reference_name,
       content,
-      user_id = 7,
+      user_id,
       url,
       password,
       tracking_pixel,
       custom_page,
     } = req.body;
-    if (!type_name || !ar_type) {
+    if (!type_name || !user_id || !ar_type) {
       return next(new ErrorHandler("Required fields are missing", 400));
     }
-    // const user = await Users.findOne({ where: { id: user_id } });
-    // if (!user) {
-    //   return next(new ErrorHandler("User not found", 404));
-    // }
+    const user = await Users.findOne({ where: { id: user_id } });
+    if (!user) {
+      return next(new ErrorHandler("User not found", 404));
+    }
 
     const generatedUuid = uuid();
     const qrCodeUrl = `${process.env.BASE_URL || ""}/ar-text/${generatedUuid}`;

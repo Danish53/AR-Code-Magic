@@ -48,7 +48,7 @@ const Packages = sequelize.define(
     added_by: {
       type: DataTypes.INTEGER,
       references: {
-        model: "Users",
+        model: "users",
         key: "id",
       },
       allowNull: false,

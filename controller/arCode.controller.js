@@ -53,7 +53,7 @@ export const generateQrCodes = asyncErrors(async (req, res, next) => {
       password,
       tracking_pixel,
       custom_page,
-      user_id,
+      user_id: 1,
       qr_code: qrCodeImage,
     });
 

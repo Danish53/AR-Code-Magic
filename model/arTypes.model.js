@@ -1,4 +1,4 @@
-import { DataTypes } from "sequelize";
+import { DataTypes, STRING } from "sequelize";
 import { sequelize } from "../database/dbConnction.js";
 
 const ArTypes = sequelize.define(
@@ -20,7 +20,7 @@ const ArTypes = sequelize.define(
     },
     ar_type: {
       type: DataTypes.STRING,
-      allowNull: false,
+      // allowNull: false,
     },
     font: {
       type: DataTypes.STRING,
@@ -29,13 +29,13 @@ const ArTypes = sequelize.define(
       type: DataTypes.STRING,
     },
     depth: {
-      type: DataTypes.STRING,
+      type: DataTypes.FLOAT,
     },
     gloss: {
-      type: DataTypes.STRING,
+      type: DataTypes.FLOAT,
     },
     scale: {
-      type: DataTypes.STRING,
+      type: DataTypes.FLOAT,
     },
     orientation: {
       type: DataTypes.STRING,
@@ -71,7 +71,10 @@ const ArTypes = sequelize.define(
     },
     qr_code: {
       type: DataTypes.STRING,
-    }
+    },
+    model_path: {
+      type: DataTypes.STRING,
+    },
   },
   {
     timestamps: true,

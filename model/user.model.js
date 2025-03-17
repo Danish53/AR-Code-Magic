@@ -76,7 +76,7 @@ Users.prototype.comparePassword = async function (enteredPassword) {
 };
 
 Users.prototype.getJWTToken = function () {
-  return jwt.sign(
+  return jwt.sign( 
     { id: this.id, email: this.email },
     process.env.JWT_SECRET_KEY,
     {

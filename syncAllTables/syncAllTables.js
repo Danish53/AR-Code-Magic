@@ -1,4 +1,4 @@
-import { Users, AdminSettings, Packages, blogCategories, blogs, Orders, StripeKeys, ArTypes } from "../model/index.js";
+import { Users, AdminSettings, Packages, blogCategories, blogs, Orders, StripeKeys, ArTypes, UpdateModel } from "../model/index.js";
 
 export const syncAllTables = async (req, res) => {
   try {
@@ -11,6 +11,7 @@ export const syncAllTables = async (req, res) => {
     await Orders.sync({ alter: true });
     await StripeKeys.sync({ alter: true });
     await ArTypes.sync({ alter: true });
+    await UpdateModel.sync({ alter: true });
 
     res.status(200).json({ message: "All tables synchronized successfully!" });
   } catch (err) {

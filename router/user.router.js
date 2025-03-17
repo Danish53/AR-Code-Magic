@@ -12,7 +12,8 @@ import {
 } from "../controller/user.controller.js";
 import { isAuthenticated } from "../middleware/Auth.js";
 import { blogSearch, getAllBlogs, getCategories, singleBlog } from "../controller/blogs.controller.js";
-import { arTextView, generateQrCodes } from "../controller/arCode.controller.js";
+import { arModelView, generateQrCodes, latestModel, updatedModel } from "../controller/arCode.controller.js";
+// import { upload } from "../middleware/multer.js";
 
 const router = express.Router();
 // Auth
@@ -35,7 +36,9 @@ router.get("/blog-search/:category_id", blogSearch);
 router.get("/single-blog/:blog_id", singleBlog);
 
 // ar code generate
+router.post("/update-model", updatedModel);
 router.post("/generate-qrcode", generateQrCodes);
-router.get("/get-ar-types/:id", arTextView);
+router.get("/get-ar-types/:id", arModelView);
+router.get("/get-latest-model", latestModel);
 
 export default router;

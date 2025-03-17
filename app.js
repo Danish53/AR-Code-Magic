@@ -10,8 +10,20 @@ import { errorMiddleware } from "./middleware/error.js";
 import userRouter from "./router/user.router.js";
 import adminRouter from "./router/admin.router.js";
 // import stripe from "stripe";
+import path from "path";
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import http from "http";
+
+import { Server } from "socket.io";
+
 
 const app = express();
+const server = http.createServer(app);
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 dotenv.config({ path: ".env" });
 
 app.use(
@@ -22,12 +34,37 @@ app.use(
   })
 );
 
+const io = new Server(server, {
+  cors: {
+    origin: "http://localhost:5173",
+    methods: ["GET", "POST"],
+  },
+});
+
+
+app.use((req, res, next) => {
+  req.getIo = () => io;
+  next();
+});
+
+io.on("connection", (socket) => {
+  console.log("New WebSocket connection:", socket.id);
+
+  socket.on("disconnect", () => {
+    console.log("User disconnected:", socket.id);
+  });
+});
+
+
 app.use(cookieParser());
 app.use(express.json());
 app.use(compression());
 app.use(express.urlencoded({ limit: "16kb", extended: true }));
 app.use(express.static("public"));
 app.use('/uploads', express.static('uploads'));
+app.use("/models", express.static(path.join(__dirname, "output")));
+app.use("/models", express.static(path.join(__dirname, "temp")));
+
 
 app.use(
   session({
@@ -52,5 +89,9 @@ app.use("/api/admin", adminRouter);
 
 dbConnection();
 app.use(errorMiddleware);
+
+server.listen(process.env.PORT || 8000, () => {
+  console.log(`Server running on port ${process.env.PORT}`);
+});
 
 export default app; 

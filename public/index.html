@@ -1,14 +1,65 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Code Magic</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Model Updater</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r146/three.min.js"></script>
 </head>
 <body>
-    <div style="display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column;">
-        <h1 style="font-size: 3rem;">AR Code Magic</h1>
-        <p>Scan the QR code to open the app</p>
-    </div>
+  <div>
+    <input type="text" id="text-input" placeholder="Enter text">
+    <button id="update-button">Update Model</button>
+  </div>
+  <canvas id="canvas"></canvas>
+
+  <script>
+    const socket = io("http://localhost:8000");
+
+    // Three.js setup
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("canvas") });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+
+    let model;
+
+    // Load initial GLB model
+    const loader = new THREE.GLTFLoader();
+    loader.load("http://localhost:8000/models/147e4f26.glb", (gltf) => {
+      model = gltf.scene;
+      scene.add(model);
+    });
+
+    // Handle model updates via WebSocket
+    socket.on("model_update", (data) => {
+      const blob = new Blob([data], { type: "model/gltf-binary" });
+      const url = URL.createObjectURL(blob);
+
+      loader.load(url, (gltf) => {
+        scene.remove(model);
+        model = gltf.scene;
+        scene.add(model);
+      });
+    });
+
+    // Update model on button click
+    document.getElementById("update-button").addEventListener("click", () => {
+      const text = document.getElementById("text-input").value;
+      fetch("api/v1/user/update-model", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type_name: text }),
+      });
+    });
+
+    // Render loop
+    function animate() {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
 </body>
 </html>

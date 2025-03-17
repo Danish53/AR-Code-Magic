@@ -7,6 +7,7 @@ import { blogs } from "./blogs.model.js";
 import { Orders } from "./orders.model.js";
 import { StripeKeys } from "./stripeKeys.model.js";
 import { ArTypes } from "./arTypes.model.js";
+import { UpdateModel } from "./tempUpdateModel.model.js";
 
 Users.hasMany(Packages, {
   foreignKey: "added_by",
@@ -25,4 +26,4 @@ ArTypes.belongsTo(Users, {
   as: "users",
 });
 
-export { sequelize, Users, Packages, AdminSettings, blogCategories, blogs, Orders, StripeKeys, ArTypes };
+export { sequelize, Users, Packages, AdminSettings, blogCategories, blogs, Orders, StripeKeys, ArTypes, UpdateModel };

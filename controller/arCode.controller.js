@@ -120,6 +120,26 @@ export const generateQrCodes = asyncErrors(async (req, res, next) => {
     return next(new ErrorHandler("Required fields are missing", 400));
   }
 
+  const baseDir = path.join(__dirname, "..");
+    const tempDir = path.join(baseDir, "temp");
+
+  if (fs.existsSync(tempDir)) {
+    const files = fs.readdirSync(tempDir); // Read all files in temp folder
+
+    files.forEach((file) => {
+      if (file.includes(user_id)) {  // ✅ Delete only user-specific files
+        const filePath = path.join(tempDir, file);
+        fs.unlinkSync(filePath); // Delete file
+        console.log(`Deleted temp file: ${filePath}`);
+      }
+    });
+  }
+
+    // 🟢 STEP 3: Remove entries from DB
+    await UpdateModel.destroy({ where: { user_id } });
+    console.log(`Deleted database entries for user: ${user_id}`);
+  
+
   try {
     const modelId = uuid().replace(/-/g, "").substring(0, 8);
     const baseDir = path.join(__dirname, "..");
@@ -143,7 +163,7 @@ export const generateQrCodes = asyncErrors(async (req, res, next) => {
         return next(new ErrorHandler("Model file not found", 500));
       }
 
-      const qrCodeUrl = `https://gomeet.techifort.com/ar-text/${modelId}`;
+      const qrCodeUrl = `${process.env.FRONTEND_URL}ar-text/${modelId}`;
       const qrCodeImage = await QRCode.toDataURL(qrCodeUrl);
 
       const modelUrl = `models/${modelId}.glb`;

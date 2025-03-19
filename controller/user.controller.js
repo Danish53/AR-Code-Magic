@@ -29,12 +29,12 @@ export const register = asyncErrors(async (req, res, next) => {
   try {
     let userEmail = await Users.findOne({ where: { email } });
     if (userEmail) {
-      return next(new ErrorHandler("User email already exists", 400));
+      return next(new ErrorHandler("User already exists!", 400));
     }
 
     let userName = await Users.findOne({ where: { user_name } });
     if (userName) {
-      return next(new ErrorHandler("User name already exists", 400));
+      return next(new ErrorHandler("User already exists!", 400));
     }
 
     const user = await Users.create({
@@ -45,7 +45,7 @@ export const register = asyncErrors(async (req, res, next) => {
 
     await user.save();
 
-    sendToken(user, 200, "User registered successfully", res);
+    sendToken(user, 200, "User registered successfully!", res);
   } catch (error) {
     return next(new ErrorHandler(error.message, 500));
   }

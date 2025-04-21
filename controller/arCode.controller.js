@@ -48,6 +48,7 @@ export const updatedModel = async (req, res, next) => {
 
     // **Run Blender Command**
     const command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${type_name}" "${fontPath}" "${color}" "${depth}" "${gloss}" "${scale}" "${orientation}" "${model_path}"`;
+    console.log(command, "commmmmmm,,,,,,,,,,");
 
     exec(command, async (error, stdout, stderr) => {
       if (error) {

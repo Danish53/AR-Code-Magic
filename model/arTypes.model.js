@@ -70,7 +70,7 @@ const ArTypes = sequelize.define(
       },
     },
     qr_code: {
-      type: DataTypes.TEXT,
+      type: DataTypes.TEXT('long'),
     },
     model_path: {
       type: DataTypes.STRING,

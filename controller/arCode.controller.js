@@ -48,42 +48,220 @@ export const updatedModel = async (req, res, next) => {
 
     // **Run Blender Command**
     const command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${type_name}" "${fontPath}" "${color}" "${depth}" "${gloss}" "${scale}" "${orientation}" "${model_path}"`;
+
     console.log(command, "commmmmmm,,,,,,,,,,");
 
-    exec(command, async (error, stdout, stderr) => {
-      if (error) {
-        console.error("❌ Error:", error, stderr);
-        return res.status(500).json({ error: "3D model generation failed" });
-      }
+    const timeout = 600000; // Timeout for the Blender process (600 seconds)
 
-      if (!fs.existsSync(model_path)) {
-        return res.status(500).json({ error: "Generated model file not found" });
-      }
+    // Wrap exec in a promise to handle timeouts
+    const execPromise = new Promise((resolve, reject) => {
+      const execProcess = exec(command, async (error, stdout, stderr) => {
+        if (error) {
+          console.error("❌ Error:", error, stderr);
+          reject({ status: 500, message: "3D model generation failed" });
+        } else {
+          resolve(stdout);
+        }
+      });
 
-      const modelUrl = `models/${modelId}.glb`;
+      // Set timeout for the exec process
+      setTimeout(() => {
+        execProcess.kill();
+        reject({ status: 500, message: "Blender process timed out" });
+      }, timeout);
+    });
 
-      // **Save to Database**
-      const newModel = await UpdateModel.create({
-        id: modelId,
-        user_id,
-        type_name,
+    // Execute the command
+    await execPromise;
+
+    if (!fs.existsSync(model_path)) {
+      return res.status(500).json({ error: "Generated model file not found" });
+    }
+
+    const modelUrl = `models/${modelId}.glb`;
+
+    // **Save to Database**
+    const newModel = await UpdateModel.create({
+      id: modelId,
+      user_id,
+      type_name,
+      model_path: modelUrl,
+    });
+
+    req.getIo().emit("modelUpdated", { id: modelId, model_path: modelUrl });
+
+    res.json({
+      success: true,
+      message: "Model created successfully",
+      data: {
+        id: newModel.id,
         model_path: modelUrl,
-      });
-
-      req.getIo().emit("modelUpdated", { id: modelId, model_path: modelUrl });
-
-      res.json({
-        success: true,
-        message: "Model created successfully",
-        data: {
-          id: newModel.id,
-          model_path: modelUrl,
-        },
-      });
+      },
     });
   } catch (error) {
     console.error("❌ Error:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(error.status || 500).json({ error: error.message || "Internal server error" });
+  }
+};
+
+// photoModel
+export const createPhotoModel = async (req, res, next) => {
+  const { orientation, border, color, scale, user_id } = req.body;
+  const type_name = req.file?.filename; // 📸 Get uploaded file from multer
+
+  if (!type_name || !user_id) {
+    return res.status(400).json({ error: "Required fields are missing" });
+  }
+
+  try {
+    // **Find Photo Path**
+    const photosDir = path.join(__dirname, "..", "uploads");
+    console.log(photosDir, "......dirphoto")
+    const photoPath = path.join(photosDir, type_name);
+
+    if (!fs.existsSync(photoPath)) {
+      return res.status(400).json({ error: "Photo not found!" });
+    }
+
+    console.log("✅ Photo Path Found:", photoPath);
+
+    // **Generate Model Path**
+    const modelId = uuid().replace(/-/g, "").substring(0, 8);
+    const uploadsDir = path.join(__dirname, "..", "temp");
+
+    const modelPath = path.join(uploadsDir, `${modelId}.glb`);
+    const scriptPath = path.join(__dirname, "scripts", "generate_photo_model.py");
+
+    // **Blender Command**
+    const command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${photoPath}" "${orientation}" "${border}" "${color}" "${scale}" "${modelPath}"`;
+
+    console.log("Executing Blender command:", command);
+
+    // **Run Command**
+    const timeout = 600000; // 10 minutes
+
+    const execPromise = new Promise((resolve, reject) => {
+      const execProcess = exec(command, async (error, stdout, stderr) => {
+        if (error) {
+          console.error("❌ Blender error:", error, stderr);
+          reject({ status: 500, message: "AR photo model generation failed" });
+        } else {
+          resolve(stdout);
+        }
+      });
+
+      setTimeout(() => {
+        execProcess.kill();
+        reject({ status: 500, message: "Blender process timed out" });
+      }, timeout);
+    });
+
+    await execPromise;
+
+    if (!fs.existsSync(modelPath)) {
+      return res.status(500).json({ error: "Generated model file not found" });
+    }
+
+    const modelUrl = `models/${modelId}.glb`;
+
+    // **Save to Database**
+    const newPhotoModel = await UpdateModel.create({
+      id: modelId,
+      user_id,
+      type_name,
+      model_path: modelUrl,
+    });
+
+    req.getIo().emit("photoModelUpdated", { id: modelId, model_path: modelUrl });
+
+    res.json({
+      success: true,
+      message: "Photo AR model created successfully",
+      data: {
+        id: newPhotoModel.id,
+        model_path: modelUrl,
+      },
+    });
+
+  } catch (error) {
+    console.error("❌ Error:", error);
+    res.status(error.status || 500).json({ error: error.message || "Internal server error" });
+  }
+};
+
+export const generateObjectModel = async (req, res) => {
+  const { user_id } = req.body;
+  const videoFile = req.file;
+
+  if (!videoFile || !user_id) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  try {
+    const modelId = uuid().replace(/-/g, '').substring(0, 8);
+    const outputDir = path.join(__dirname, '../temp');
+    const outputPath = path.join(outputDir, `${modelId}.glb`);
+    const videoPath = path.join(videoFile.destination, videoFile.filename);
+    
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
+
+    const scriptPath = path.join(__dirname, './scripts/generate_object_model.py');
+    const command = `"${process.env.PYTHON_PATH || 'python'}" "${scriptPath}" "${videoPath}" "${outputPath}"`;
+
+    console.log("Running command:", command);
+
+    exec(command, { maxBuffer: 1024 * 1024 * 50 }, async (error, stdout, stderr) => {
+      console.log("STDOUT:", stdout);
+      if (stderr) console.error("STDERR:", stderr);
+
+      if (error) {
+        console.error("Exec error:", error);
+        return res.status(500).json({ error: "Model generation failed", details: error.message });
+      }
+
+      if (!fs.existsSync(outputPath)) {
+        return res.status(500).json({ 
+          error: "Model generation failed",
+          details: stderr || stdout || "Unknown error"
+        });
+      }
+
+      try {
+        const modelUrl = `/models/${modelId}.glb`;
+        await UpdateModel.create({
+          id: modelId,
+          user_id,
+          model_path: modelUrl,
+          type_name: videoFile.originalname
+        });
+
+        const publicPath = path.join(__dirname, '../../public/models');
+        if (!fs.existsSync(publicPath)) {
+          fs.mkdirSync(publicPath, { recursive: true });
+        }
+        await fs.promises.rename(outputPath, path.join(publicPath, `${modelId}.glb`));
+        await fs.promises.unlink(videoPath);
+
+        return res.status(200).json({
+          success: true,
+          data: {
+            id: modelId,
+            model_url: modelUrl
+          }
+        });
+      } catch (dbError) {
+        console.error("Database error:", dbError);
+        if (fs.existsSync(outputPath)) {
+          await fs.promises.unlink(outputPath);
+        }
+        return res.status(500).json({ error: "Failed to save model" });
+      }
+    });
+  } catch (err) {
+    console.error("Unexpected error:", err);
+    return res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -95,7 +273,117 @@ export const latestModel = asyncErrors(async (req, res, next) => {
   } else {
     res.status(404).json({ success: false, message: "Model not found" });
   }
-}); 
+});
+
+// export const generateQrCodes = asyncErrors(async (req, res, next) => {
+//   const {
+//     type_name,
+//     ar_type,
+//     font,
+//     color,
+//     depth,
+//     gloss,
+//     scale,
+//     orientation,
+//     reference_name,
+//     content,
+//     user_id,
+//     url,
+//     password,
+//     tracking_pixel,
+//     custom_page,
+//   } = req.body;
+
+//   // Validate required fields
+//   if (!type_name || !user_id || !ar_type) {
+//     return next(new ErrorHandler("Required fields are missing", 400));
+//   }
+
+//   const baseDir = path.join(__dirname, "..");
+//   const tempDir = path.join(baseDir, "temp");
+
+//   if (fs.existsSync(tempDir)) {
+//     const files = fs.readdirSync(tempDir); // Read all files in temp folder
+
+//     files.forEach((file) => {
+//       if (file.includes(user_id)) {  // ✅ Delete only user-specific files
+//         const filePath = path.join(tempDir, file);
+//         fs.unlinkSync(filePath); // Delete file
+//         console.log(`Deleted temp file: ${filePath}`);
+//       }
+//     });
+//   }
+
+//   // 🟢 STEP 3: Remove entries from DB
+//   await UpdateModel.destroy({ where: { user_id } });
+//   console.log(`Deleted database entries for user: ${user_id}`);
+
+
+//   try {
+//     const modelId = uuid().replace(/-/g, "").substring(0, 8);
+//     const baseDir = path.join(__dirname, "..");
+//     const uploadsDir = path.join(baseDir, "output");
+//     const model_path = path.join(uploadsDir, `${modelId}.glb`);
+
+//     const scriptPath = path.join(__dirname, "scripts", "generate_model.py");
+
+//     // Call Blender script to generate 3D model
+//     const command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${type_name}" "${font}" "${color}" "${depth}" "${gloss}" "${scale}" "${orientation}" "${model_path}"`;
+//     console.log("......comand", command)
+//     exec(command, async (error, stdout, stderr) => {
+//       if (error) {
+//         console.error("Error generating 3D model:", error);
+//         console.error("Blender Stderr:", stderr);
+//         return next(new ErrorHandler("Error generating 3D model", 500));
+//       }
+
+//       if (!fs.existsSync(model_path)) {
+//         console.error("Model file not found:", model_path);
+//         return next(new ErrorHandler("Model file not found", 500));
+//       }
+
+//       const qrCodeUrl = `${process.env.FRONTEND_URL}ar-text/${modelId}`;
+//       const qrCodeImage = await QRCode.toDataURL(qrCodeUrl);
+
+//       const modelUrl = `models/${modelId}.glb`;
+
+//       const newText = await ArTypes.create({
+//         id: modelId,
+//         type_name,
+//         ar_type,
+//         font,
+//         color,
+//         depth,
+//         gloss,
+//         scale,
+//         orientation,
+//         reference_name,
+//         content,
+//         url,
+//         password,
+//         tracking_pixel,
+//         custom_page,
+//         user_id,
+//         qr_code: qrCodeImage,
+//         model_path: modelUrl
+//       });
+
+//       res.json({
+//         success: true,
+//         message: "QR Code generated successfully",
+//         data: {
+//           id: newText.id,
+//           qr_code: qrCodeImage,
+//           qr_code_url: qrCodeUrl,
+//           model_path: modelUrl
+//         },
+//       });
+//     });
+//   } catch (error) {
+//     console.error("Error generating QR Code:", error);
+//     return next(new ErrorHandler("internal server error!", 500));
+//   }
+// });
 
 export const generateQrCodes = asyncErrors(async (req, res, next) => {
   const {
@@ -114,97 +402,121 @@ export const generateQrCodes = asyncErrors(async (req, res, next) => {
     password,
     tracking_pixel,
     custom_page,
+    border,
   } = req.body;
 
-  // Validate required fields
-  if (!type_name || !user_id || !ar_type) {
+  const arPhoto = req.file; // For AR Photo, the image will be in req.file (from form-data)
+
+  if (!user_id || !ar_type) {
     return next(new ErrorHandler("Required fields are missing", 400));
   }
 
   const baseDir = path.join(__dirname, "..");
-    const tempDir = path.join(baseDir, "temp");
+  const tempDir = path.join(baseDir, "temp");
 
-  if (fs.existsSync(tempDir)) {
-    const files = fs.readdirSync(tempDir); // Read all files in temp folder
-
-    files.forEach((file) => {
-      if (file.includes(user_id)) {  // ✅ Delete only user-specific files
-        const filePath = path.join(tempDir, file);
-        fs.unlinkSync(filePath); // Delete file
-        console.log(`Deleted temp file: ${filePath}`);
-      }
-    });
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir);
   }
 
-    // 🟢 STEP 3: Remove entries from DB
-    await UpdateModel.destroy({ where: { user_id } });
-    console.log(`Deleted database entries for user: ${user_id}`);
-  
+  // 🧹 Clean up previous files for this user
+  fs.readdirSync(tempDir)
+    .filter(file => file.includes(user_id))
+    .forEach(file => fs.unlinkSync(path.join(tempDir, file)));
 
-  try {
-    const modelId = uuid().replace(/-/g, "").substring(0, 8);
-    const baseDir = path.join(__dirname, "..");
-    const uploadsDir = path.join(baseDir, "output");
-    const model_path = path.join(uploadsDir, `${modelId}.glb`);
+  await UpdateModel.destroy({ where: { user_id } });
 
-    const scriptPath = path.join(__dirname, "scripts", "generate_model.py"); 
+  const modelId = uuid().replace(/-/g, "").substring(0, 8);
+  const modelPath = path.join(tempDir, `${modelId}.glb`);
+  let command = "";
+  let finalTypeName = "";
 
-    // Call Blender script to generate 3D model
-    const command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${type_name}" "${font}" "${color}" "${depth}" "${gloss}" "${scale}" "${orientation}" "${model_path}"`;
-    console.log("......comand", command)
-    exec(command, async (error, stdout, stderr) => {
+  if (ar_type === "AR Text") {
+    // if (!type_name || !font || !color || !depth || !gloss || !scale || !orientation) {
+    //   return next(new ErrorHandler("Missing fields for AR Text", 400));
+    // }
+
+    finalTypeName = type_name;
+    const scriptPath = path.join(__dirname, "scripts", "generate_model.py");
+
+    command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${type_name}" "${font}" "${color}" "${depth}" "${gloss}" "${scale}" "${orientation}" "${modelPath}"`;
+
+  } else if (ar_type === "AR Photo") {
+    if (!arPhoto) return next(new ErrorHandler("Photo is required", 400));
+
+    const photoPath = path.join(baseDir, "uploads", arPhoto.filename);
+    if (!fs.existsSync(photoPath)) {
+      return next(new ErrorHandler("Uploaded photo not found", 400));
+    }
+
+    finalTypeName = arPhoto.filename;
+    const scriptPath = path.join(__dirname, "scripts", "generate_photo_model.py");
+
+    command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${photoPath}" "${orientation}" "${border}" "${color}" "${scale}" "${modelPath}"`;
+
+  } else {
+    return next(new ErrorHandler("Invalid AR Type", 400));
+  }
+
+  console.log("🔧 Executing Blender command:", command);
+
+  const execPromise = new Promise((resolve, reject) => {
+    const process = exec(command, (error, stdout, stderr) => {
       if (error) {
-        console.error("Error generating 3D model:", error);
-        console.error("Blender Stderr:", stderr);
-        return next(new ErrorHandler("Error generating 3D model", 500));
+        console.error("❌ Blender Error:", error, stderr);
+        reject(new ErrorHandler("Blender model generation failed", 500));
+      } else {
+        resolve(stdout);
       }
-
-      if (!fs.existsSync(model_path)) {
-        console.error("Model file not found:", model_path);
-        return next(new ErrorHandler("Model file not found", 500));
-      }
-
-      const qrCodeUrl = `${process.env.FRONTEND_URL}ar-text/${modelId}`;
-      const qrCodeImage = await QRCode.toDataURL(qrCodeUrl);
-
-      const modelUrl = `models/${modelId}.glb`;
-
-      const newText = await ArTypes.create({
-        id: modelId,
-        type_name,
-        ar_type,
-        font,
-        color,
-        depth,
-        gloss,
-        scale,
-        orientation,
-        reference_name,
-        content,
-        url,
-        password,
-        tracking_pixel,
-        custom_page,
-        user_id,
-        qr_code: qrCodeImage,
-        model_path: modelUrl
-      });
-
-      res.json({
-        success: true,
-        message: "QR Code generated successfully",
-        data: {
-          id: newText.id,
-          qr_code: qrCodeImage,
-          qr_code_url: qrCodeUrl,
-          model_path: modelUrl
-        },
-      });
     });
-  } catch (error) {
-    console.error("Error generating QR Code:", error);
-    return next(new ErrorHandler("internal server error!", 500));
+
+    setTimeout(() => {
+      process.kill();
+      reject(new ErrorHandler("Blender process timeout", 500));
+    }, 600000); // 10 minutes max
+  });
+
+  await execPromise;
+
+  if (!fs.existsSync(modelPath)) {
+    return next(new ErrorHandler("Model not found after generation", 500));
   }
+
+  const modelUrl = `models/${modelId}.glb`;
+  const qrCodeUrl = `${process.env.FRONTEND_URL}ar-text/${modelId}`;
+  const qrCodeImage = await QRCode.toDataURL(qrCodeUrl);
+
+  const newAR = await ArTypes.create({
+    id: modelId,
+    type_name: finalTypeName,
+    ar_type,
+    font: font || null,
+    color: color || null,
+    depth: depth || null,
+    gloss: gloss || null,
+    scale: scale || null,
+    orientation: orientation || null,
+    reference_name,
+    content,
+    url,
+    password,
+    tracking_pixel,
+    custom_page,
+    user_id,
+    border,
+    qr_code: qrCodeImage,
+    model_path: modelUrl,
+  });
+
+  res.json({
+    success: true,
+    message: `${ar_type} QR Code created`,
+    data: {
+      id: newAR.id,
+      qr_code: qrCodeImage,
+      qr_code_url: qrCodeUrl,
+      model_path: modelUrl,
+    },
+  });
 });
 
 export const arModelView = asyncErrors(async (req, res, next) => {

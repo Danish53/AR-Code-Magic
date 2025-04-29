@@ -40,6 +40,9 @@ const ArTypes = sequelize.define(
     orientation: {
       type: DataTypes.STRING,
     },
+    border: {
+      type: DataTypes.STRING,
+    },
     reference_name: {
       type: DataTypes.STRING,
       allowNull: false,

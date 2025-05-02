@@ -19,6 +19,7 @@ const __dirname = dirname(__filename);
 const baseDir = path.join(__dirname, "..");
 const uploadsDir = path.join(baseDir, "output");
 
+// ar text model
 export const updatedModel = async (req, res, next) => {
   const { type_name, font, color, depth, gloss, scale, orientation, user_id } = req.body;
 
@@ -103,8 +104,7 @@ export const updatedModel = async (req, res, next) => {
     res.status(error.status || 500).json({ error: error.message || "Internal server error" });
   }
 };
-
-// photoModel
+// ar photo Model
 export const createPhotoModel = async (req, res, next) => {
   const { orientation, border, color, scale, user_id } = req.body;
   const type_name = req.file?.filename; // 📸 Get uploaded file from multer
@@ -188,7 +188,99 @@ export const createPhotoModel = async (req, res, next) => {
     res.status(error.status || 500).json({ error: error.message || "Internal server error" });
   }
 };
+// ar portal model
+export const createPortalModel = async (req, res, next) => {
+  const { user_id } = req.body;
+  let type_name = req.file?.filename;
 
+  if (!type_name || !user_id) {
+    return res.status(400).json({ error: "Required fields are missing" });
+  }
+
+  const allowedExtensions = [".jpg", ".jpeg", ".png"];
+  const fileExt = path.extname(type_name).toLowerCase();
+
+  if (!allowedExtensions.includes(fileExt)) {
+    // Delete invalid file
+    const uploadedFilePath = path.join(__dirname, "..", "uploads", type_name);
+    if (fs.existsSync(uploadedFilePath)) {
+      fs.unlinkSync(uploadedFilePath);
+    }
+    return res.status(400).json({ error: "Only JPG and PNG files are allowed" });
+  }
+
+  try {
+    const photosDir = path.join(__dirname, "..", "uploads");
+    const photoPath = path.join(photosDir, type_name);
+
+    if (!fs.existsSync(photoPath)) {
+      return res.status(400).json({ error: "Photo 360 not found!" });
+    }
+
+    const modelId = uuid().replace(/-/g, "").substring(0, 8);
+    const uploadsDir = path.join(__dirname, "..", "temp");
+
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir);
+    }
+
+    const modelPath = path.join(uploadsDir, `${modelId}.glb`);
+    const scriptPath = path.join(__dirname, "scripts", "generate_portal_model.py");
+
+    const command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${photoPath}" "${modelPath}"`;
+    console.log("Executing Blender command:", command);
+
+    const timeout = 600000;
+
+    const execPromise = new Promise((resolve, reject) => {
+      const execProcess = exec(command, (error, stdout, stderr) => {
+        if (error) {
+          console.error("❌ Blender error:", error, stderr);
+          reject({ status: 500, message: "AR photo model generation failed" });
+        } else {
+          resolve(stdout);
+        }
+      });
+
+      setTimeout(() => {
+        execProcess.kill();
+        reject({ status: 500, message: "Blender process timed out" });
+      }, timeout);
+    });
+
+    await execPromise;
+
+    if (!fs.existsSync(modelPath)) {
+      return res.status(500).json({ error: "Generated model file not found" });
+    }
+
+    const modelUrl = `models/${modelId}.glb`;
+
+    const newPhotoModel = await UpdateModel.create({
+      id: modelId,
+      user_id,
+      type_name,
+      model_path: modelUrl,
+    });
+
+    req.getIo().emit("photoModelUpdated", { id: modelId, model_path: modelUrl });
+
+    res.json({
+      success: true,
+      message: "360° Photo model created successfully",
+      data: {
+        id: newPhotoModel.id,
+        model_path: modelUrl,
+      },
+    });
+
+  } catch (error) {
+    console.error("❌ Error:", error);
+    res.status(error.status || 500).json({ error: error.message || "Internal server error" });
+  }
+};
+
+// ar object model
 export const generateObjectModel = async (req, res) => {
   const { user_id } = req.body;
   const videoFile = req.file;
@@ -202,7 +294,7 @@ export const generateObjectModel = async (req, res) => {
     const outputDir = path.join(__dirname, '../temp');
     const outputPath = path.join(outputDir, `${modelId}.glb`);
     const videoPath = path.join(videoFile.destination, videoFile.filename);
-    
+
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
@@ -222,7 +314,7 @@ export const generateObjectModel = async (req, res) => {
       }
 
       if (!fs.existsSync(outputPath)) {
-        return res.status(500).json({ 
+        return res.status(500).json({
           error: "Model generation failed",
           details: stderr || stdout || "Unknown error"
         });
@@ -385,6 +477,7 @@ export const latestModel = asyncErrors(async (req, res, next) => {
 //   }
 // });
 
+// qr code and model generate
 export const generateQrCodes = asyncErrors(async (req, res, next) => {
   const {
     type_name,
@@ -453,7 +546,20 @@ export const generateQrCodes = asyncErrors(async (req, res, next) => {
 
     command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${photoPath}" "${orientation}" "${border}" "${color}" "${scale}" "${modelPath}"`;
 
-  } else {
+  }else if( ar_type === "AR Portal" ) {
+    if (!arPhoto) return next(new ErrorHandler("Photo Portal is required", 400));
+
+    const photoPath = path.join(baseDir, "uploads", arPhoto.filename);
+    if (!fs.existsSync(photoPath)) {
+      return next(new ErrorHandler("Uploaded photo not found", 400));
+    }
+
+    finalTypeName = arPhoto.filename;
+    const scriptPath = path.join(__dirname, "scripts", "generate_portal_model.py");
+
+    command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${photoPath}"  "${modelPath}"`;
+
+  }else {
     return next(new ErrorHandler("Invalid AR Type", 400));
   }
 
@@ -518,7 +624,7 @@ export const generateQrCodes = asyncErrors(async (req, res, next) => {
     },
   });
 });
-
+// get single model view
 export const arModelView = asyncErrors(async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -531,6 +637,28 @@ export const arModelView = asyncErrors(async (req, res, next) => {
       success: true,
       message: "Model get successfully",
       data: model,
+    });
+  } catch (error) {
+    console.error("Error finding text:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+    });
+  }
+});
+// get single user models qr codes
+export const userArModels = asyncErrors(async (req, res, next) => {
+  try {
+    const { user_id } = req.params;
+
+    const models = await ArTypes.findOne({ where: { user_id } });
+    if (!models) {
+      return next(new ErrorHandler("Model not found in the database", 404));
+    }
+    res.json({
+      success: true,
+      message: "Models get successfully",
+      data: models,
     });
   } catch (error) {
     console.error("Error finding text:", error);

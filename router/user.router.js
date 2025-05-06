@@ -12,7 +12,7 @@ import {
 } from "../controller/user.controller.js";
 import { isAuthenticated } from "../middleware/Auth.js";
 import { blogSearch, getAllBlogs, getCategories, singleBlog } from "../controller/blogs.controller.js";
-import { arModelView, createPhotoModel, createPortalModel, generateObjectModel, generateQrCodes, latestModel, updatedModel, userArModels } from "../controller/arCode.controller.js";
+import { arModelView, createARVideoModel, createFaceModel, createPhotoModel, createPortalModel, generateObjectModel, generateQrCodes, latestModel, updatedModel, userArModels } from "../controller/arCode.controller.js";
 import { upload } from "../middleware/multer.js";
 
 const router = express.Router();
@@ -40,8 +40,10 @@ router.post("/update-model", updatedModel);
 router.post("/photo-model", upload.single("type_name"), createPhotoModel);
 router.post("/generate-object-model", upload.single("type_name"), generateObjectModel);
 router.post("/portal-model", upload.single("type_name"), createPortalModel);
+router.post("/face-model", upload.single("type_name"), createFaceModel);
+router.post("/video-model", upload.single("type_name"), createARVideoModel);
 
-router.post("/generate-qrcode", upload.single("arPhoto"),  generateQrCodes);
+router.post("/generate-qrcode", upload.single("arPhoto"), generateQrCodes);
 router.get("/get-ar-types/:id", arModelView);
 router.get("/qrcode-models/:user_id", userArModels);
 router.get("/get-latest-model", latestModel);

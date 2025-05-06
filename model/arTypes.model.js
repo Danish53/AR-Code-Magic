@@ -78,6 +78,9 @@ const ArTypes = sequelize.define(
     model_path: {
       type: DataTypes.STRING,
     },
+    model_usdz: {
+      type: DataTypes.STRING,
+    },
   },
   {
     timestamps: true,

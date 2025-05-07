@@ -782,7 +782,7 @@ export const generateQrCodes = asyncErrors(async (req, res, next) => {
     finalTypeName = arPhoto.filename;
     const scriptPath = path.join(__dirname, "scripts", "generate_photo_model.py");
 
-    command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${photoPath}" "${orientation}" "${border}" "${color}" "${scale}" "${modelPath}"`;
+    command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${photoPath}" "${orientation}" "${border}" "${color}" "${scale}" "${modelPath}" "${modelPathusdz}"`;
 
   } else if (ar_type === "AR Portal") {
     if (!arPhoto) return next(new ErrorHandler("Photo Portal is required", 400));
@@ -795,7 +795,7 @@ export const generateQrCodes = asyncErrors(async (req, res, next) => {
     finalTypeName = arPhoto.filename;
     const scriptPath = path.join(__dirname, "scripts", "generate_portal_model.py");
 
-    command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${photoPath}"  "${modelPath}"`;
+    command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${photoPath}"  "${modelPath}" "${modelPathusdz}"`;
 
   } else {
     return next(new ErrorHandler("Invalid AR Type", 400));
@@ -821,15 +821,17 @@ export const generateQrCodes = asyncErrors(async (req, res, next) => {
 
   await execPromise;
 
+  
   if (!fs.existsSync(modelPath)) {
     return next(new ErrorHandler("Model not found after generation glb", 500));
   }
-
+  
   if (!fs.existsSync(modelPathusdz)) {
     return next(new ErrorHandler("Model not found after generation usdz", 500));
   }
+
   
-  const convertScript = path.join(__dirname, "scripts", "glbConvertToUsdz", "convert.py");
+  // const convertScript = path.join(__dirname, "scripts", "glbConvertToUsdz", "convert.py");
   const modelUrl = `models/${modelId}.glb`;
   const modelUrlusdz = `models/${modelId}.usdz`;
 

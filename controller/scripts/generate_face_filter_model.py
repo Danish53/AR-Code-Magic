@@ -16,50 +16,56 @@ output_path = argv[1]
 bpy.ops.object.select_all(action='SELECT')
 bpy.ops.object.delete(use_global=False)
 
-# === Load head model ===
-head_model_path = os.path.join(os.path.dirname(__file__), "assets", "untitled.glb")
+# === Load head model (.glb) ===
+head_model_path = os.path.join(os.path.dirname(__file__), "assets", "HUMANNORMALR.glb")
 if not os.path.exists(head_model_path):
-    print("Head model not found:", head_model_path)
+    print("❌ Head model not found:", head_model_path)
     sys.exit(1)
 
 bpy.ops.import_scene.gltf(filepath=head_model_path)
-face = bpy.context.selected_objects[0]
+
+# === Get imported object ===
+face = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH'][0]
+bpy.context.view_layer.objects.active = face
+face.select_set(True)
 
 # === Load cheek image ===
 img = bpy.data.images.load(image_path)
 
-# === Create material ===
-mat = bpy.data.materials.new("CheekFilterMat")
+# === Create a new material with image on both cheeks ===
+mat = bpy.data.materials.new(name="CheekFilterMat")
 mat.use_nodes = True
 nodes = mat.node_tree.nodes
 links = mat.node_tree.links
 nodes.clear()
 
-# === Coordinate input ===
+# === Nodes ===
 tex_coord = nodes.new("ShaderNodeTexCoord")
 
-# === LEFT Cheek ===
+# LEFT Cheek
 map_left = nodes.new("ShaderNodeMapping")
-map_left.inputs['Location'].default_value = (-0.1, 0.0, 0.05)
+map_left.inputs['Location'].default_value = (-0.1, 0.0, 0.15)
 map_left.inputs['Scale'].default_value = (5.0, 5.0, 5.0)
+
 tex_left = nodes.new("ShaderNodeTexImage")
 tex_left.image = img
 
-# === RIGHT Cheek ===
+# RIGHT Cheek
 map_right = nodes.new("ShaderNodeMapping")
-map_right.inputs['Location'].default_value = (0.1, 0.0, 0.05)
+map_right.inputs['Location'].default_value = (0.1, 0.0, 0.15)
 map_right.inputs['Scale'].default_value = (5.0, 5.0, 5.0)
+
 tex_right = nodes.new("ShaderNodeTexImage")
 tex_right.image = img
 
-# === Mix Textures ===
+# Mix both images
 mix = nodes.new("ShaderNodeMixRGB")
 mix.blend_type = 'ADD'
 mix.inputs['Fac'].default_value = 1.0
 
-# === Final shader ===
+# Principled Shader and Output
 bsdf = nodes.new("ShaderNodeBsdfPrincipled")
-out = nodes.new("ShaderNodeOutputMaterial")
+output = nodes.new("ShaderNodeOutputMaterial")
 
 # === Connect Nodes ===
 links.new(tex_coord.outputs['Object'], map_left.inputs['Vector'])
@@ -72,14 +78,18 @@ links.new(tex_left.outputs['Color'], mix.inputs[1])
 links.new(tex_right.outputs['Color'], mix.inputs[2])
 
 links.new(mix.outputs['Color'], bsdf.inputs['Base Color'])
-links.new(bsdf.outputs['BSDF'], out.inputs['Surface'])
+links.new(bsdf.outputs['BSDF'], output.inputs['Surface'])
 
-# === Apply to face ===
-face.data.materials.clear()
-face.data.materials.append(mat)
+# === Apply material to face ===
+if face.data.materials:
+    face.data.materials[0] = mat
+else:
+    face.data.materials.append(mat)
 
-# === Export model ===
+# === Export selected model as .glb ===
 os.makedirs(os.path.dirname(output_path), exist_ok=True)
+bpy.ops.object.select_all(action='DESELECT')
+face.select_set(True)
 bpy.ops.export_scene.gltf(
     filepath=output_path,
     export_format='GLB',
@@ -87,8 +97,7 @@ bpy.ops.export_scene.gltf(
     export_apply=True
 )
 
-print("✅ Exported model with cheek filter to:", output_path)
-
+print("✅ Model exported successfully with cheek texture to:", output_path)
 
 
 

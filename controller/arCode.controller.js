@@ -797,6 +797,19 @@ export const generateQrCodes = asyncErrors(async (req, res, next) => {
 
     command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${photoPath}"  "${modelPath}" "${modelPathusdz}"`;
 
+  }else if (ar_type === "AR Face") {
+    if (!arPhoto) return next(new ErrorHandler("Face Portal is required", 400));
+
+    const photoPath = path.join(baseDir, "uploads", arPhoto.filename);
+    if (!fs.existsSync(photoPath)) {
+      return next(new ErrorHandler("Uploaded photo not found", 400));
+    }
+
+    finalTypeName = arPhoto.filename;
+    const scriptPath = path.join(__dirname, "scripts", "generate_face_filter_model.py");
+
+    command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${photoPath}"  "${modelPath}"`;
+
   } else {
     return next(new ErrorHandler("Invalid AR Type", 400));
   }
@@ -826,9 +839,9 @@ export const generateQrCodes = asyncErrors(async (req, res, next) => {
     return next(new ErrorHandler("Model not found after generation glb", 500));
   }
   
-  if (!fs.existsSync(modelPathusdz)) {
-    return next(new ErrorHandler("Model not found after generation usdz", 500));
-  }
+  // if (!fs.existsSync(modelPathusdz)) {
+  //   return next(new ErrorHandler("Model not found after generation usdz", 500));
+  // }
 
   
   // const convertScript = path.join(__dirname, "scripts", "glbConvertToUsdz", "convert.py");

@@ -839,9 +839,9 @@ export const generateQrCodes = asyncErrors(async (req, res, next) => {
     return next(new ErrorHandler("Model not found after generation glb", 500));
   }
   
-  // if (!fs.existsSync(modelPathusdz)) {
-  //   return next(new ErrorHandler("Model not found after generation usdz", 500));
-  // }
+  if (!fs.existsSync(modelPathusdz)) {
+    return next(new ErrorHandler("Model not found after generation usdz", 500));
+  }
 
   
   // const convertScript = path.join(__dirname, "scripts", "glbConvertToUsdz", "convert.py");

@@ -44,8 +44,8 @@ export const updatedModel = async (req, res, next) => {
     const baseDir = path.join(__dirname, "..");
     const uploadsDir = path.join(baseDir, "temp");
 
-    const model_path = path.join(uploadsDir, `${modelId}.glb`);
-    const model_usdz = path.join(uploadsDir, `${modelId}.usdz`);
+    const model_path = path.join(uploadsDir, `${user_id}_${modelId}.glb`);
+    const model_usdz = path.join(uploadsDir, `${user_id}_${modelId}.usdz`);
     const scriptPath = path.join(__dirname, "scripts", "generate_model.py");
 
     // **Run Blender Command**
@@ -125,7 +125,7 @@ export const createPhotoModel = async (req, res, next) => {
   try {
     // **Find Photo Path**
     const photosDir = path.join(__dirname, "..", "uploads");
-    console.log(photosDir, "......dirphoto")
+    // console.log(photosDir, "......dirphoto")
     const photoPath = path.join(photosDir, type_name);
 
     if (!fs.existsSync(photoPath)) {
@@ -138,7 +138,7 @@ export const createPhotoModel = async (req, res, next) => {
     const modelId = uuid().replace(/-/g, "").substring(0, 8);
     const uploadsDir = path.join(__dirname, "..", "temp");
 
-    const modelPath = path.join(uploadsDir, `${modelId}.glb`);
+    const modelPath = path.join(uploadsDir, `${user_id}_${modelId}.glb`);
     const scriptPath = path.join(__dirname, "scripts", "generate_photo_model.py");
 
     // **Blender Command**
@@ -233,7 +233,7 @@ export const createPortalModel = async (req, res, next) => {
       fs.mkdirSync(uploadsDir);
     }
 
-    const modelPath = path.join(uploadsDir, `${modelId}.glb`);
+    const modelPath = path.join(uploadsDir, `${user_id}_${modelId}.glb`);
     const scriptPath = path.join(__dirname, "scripts", "generate_portal_model.py");
 
     const command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${photoPath}" "${modelPath}"`;
@@ -318,7 +318,7 @@ export const createFaceModel = async (req, res, next) => {
       fs.mkdirSync(tempDir, { recursive: true });
     }
 
-    modelPath = path.join(tempDir, `${modelId}.glb`);
+    modelPath = path.join(tempDir, `${user_id}_${modelId}.glb`);
     const scriptPath = path.join(__dirname, "scripts", "generate_face_filter_model.py");
 
     // Verify Blender path exists
@@ -460,7 +460,7 @@ export const createARVideoModel = async (req, res, next) => {
       fs.mkdirSync(uploadsDir);
     }
 
-    const modelPath = path.join(uploadsDir, `${modelId}.glb`);
+    const modelPath = path.join(uploadsDir, `${user_id}_${modelId}.glb`);
     const scriptPath = path.join(__dirname, "scripts", "generate_video_model.py");
 
     const command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${videoPath}" "${modelPath}"`;
@@ -529,7 +529,7 @@ export const generateObjectModel = async (req, res) => {
   try {
     const modelId = uuid().replace(/-/g, '').substring(0, 8);
     const outputDir = path.join(__dirname, '../temp');
-    const outputPath = path.join(outputDir, `${modelId}.glb`);
+    const outputPath = path.join(outputDir, `${user_id}_${modelId}.glb`);
     const videoPath = path.join(videoFile.destination, videoFile.filename);
 
     if (!fs.existsSync(outputDir)) {
@@ -755,9 +755,12 @@ export const generateQrCodes = asyncErrors(async (req, res, next) => {
 
   await UpdateModel.destroy({ where: { user_id } });
 
+
   const modelId = uuid().replace(/-/g, "").substring(0, 8);
-  const modelPath = path.join(tempDir, `${modelId}.glb`);
-  const modelPathusdz = path.join(tempDir, `${modelId}.usdz`);
+  // const modelPath = path.join(tempDir, `${modelId}.glb`);
+  // const modelPathusdz = path.join(tempDir, `${modelId}.usdz`);
+  const modelPath = path.join(uploadsDir, `${user_id}_${modelId}.glb`);
+const modelPathusdz = path.join(uploadsDir, `${user_id}_${modelId}.usdz`);
   let command = "";
   let finalTypeName = "";
 

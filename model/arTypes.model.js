@@ -81,6 +81,9 @@ const ArTypes = sequelize.define(
     model_usdz: {
       type: DataTypes.STRING,
     },
+    overlay:{
+      type: DataTypes.INTEGER,
+    }
   },
   {
     timestamps: true,

@@ -80,7 +80,7 @@ export const updatedModel = async (req, res, next) => {
       return res.status(500).json({ error: "Generated model file not found" });
     }
 
-    const modelUrl = `models/${modelId}.glb`;
+    const modelUrl = `models/${user_id}_${modelId}.glb`;
     // const usdzPath = model_path.replace('.glb', '.usdz');
     // const convertCommand = `usd_from_gltf "${model_path}" "${usdzPath}"`;
     // execSync(convertCommand); // Add try/catch around this if needed
@@ -171,7 +171,7 @@ export const createPhotoModel = async (req, res, next) => {
       return res.status(500).json({ error: "Generated model file not found" });
     }
 
-    const modelUrl = `models/${modelId}.glb`;
+    const modelUrl = `models/${user_id}_${modelId}.glb`;
 
     // **Save to Database**
     const newPhotoModel = await UpdateModel.create({
@@ -263,7 +263,7 @@ export const createPortalModel = async (req, res, next) => {
       return res.status(500).json({ error: "Generated model file not found" });
     }
 
-    const modelUrl = `models/${modelId}.glb`;
+    const modelUrl = `models/${user_id}_${modelId}.glb`;
 
     const newPhotoModel = await UpdateModel.create({
       id: modelId,
@@ -463,7 +463,7 @@ export const createARVideoModel = async (req, res, next) => {
     const modelPath = path.join(uploadsDir, `${user_id}_${modelId}.glb`);
     const scriptPath = path.join(__dirname, "scripts", "generate_video_model.py");
 
-    const command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${videoPath}" "${modelPath}"`;
+    const command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${modelPath}" "${videoPath}"`;
     console.log("Executing Blender command:", command);
 
     const timeout = 600000;
@@ -490,7 +490,7 @@ export const createARVideoModel = async (req, res, next) => {
       return res.status(500).json({ error: "Generated model file not found" });
     }
 
-    const modelUrl = `models/${modelId}.glb`;
+    const modelUrl = `models/${user_id}_${modelId}.glb`;
 
     const newPhotoModel = await UpdateModel.create({
       id: modelId,
@@ -503,10 +503,108 @@ export const createARVideoModel = async (req, res, next) => {
 
     res.json({
       success: true,
-      message: "360° Photo model created successfully",
+      message: "Ar video model created successfully",
       data: {
         id: newPhotoModel.id,
         model_path: modelUrl,
+        type_name
+      },
+    });
+
+  } catch (error) {
+    console.error("❌ Error:", error);
+    res.status(error.status || 500).json({ error: error.message || "Internal server error" });
+  }
+};
+// ar logo model
+export const createARLogoModel = async (req, res, next) => {
+  const { user_id, depth, gloss, scale, orientation, overlay } = req.body;
+  let type_name = req.file?.filename;
+
+  if (!type_name || !user_id) {
+    return res.status(400).json({ error: "Required fields are missing" });
+  }
+
+  const allowedExtensions = [".svg"];
+  const fileExt = path.extname(type_name).toLowerCase();
+
+  if (!allowedExtensions.includes(fileExt)) {
+    // Delete invalid file
+    const uploadedFilePath = path.join(__dirname, "..", "uploads", type_name);
+    if (fs.existsSync(uploadedFilePath)) {
+      fs.unlinkSync(uploadedFilePath);
+    }
+    return res.status(400).json({ error: "Only .svg files are allowed" });
+  }
+
+  try {
+    const photosDir = path.join(__dirname, "..", "uploads");
+    const logoPath = path.join(photosDir, type_name);
+
+    if (!fs.existsSync(logoPath)) {
+      return res.status(400).json({ error: "logo not found!" });
+    }
+
+    const modelId = uuid().replace(/-/g, "").substring(0, 8);
+    const uploadsDir = path.join(__dirname, "..", "temp");
+
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir);
+    }
+
+    const modelPath = path.join(uploadsDir, `${user_id}_${modelId}.glb`);
+    const model_usdz = path.join(uploadsDir, `${user_id}_${modelId}.usdz`);
+    const scriptPath = path.join(__dirname, "scripts", "generate_logo_model.py");
+
+    const command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${logoPath}" "${depth}" "${gloss}" "${scale}" "${orientation}" "${overlay}" "${modelPath}" "${model_usdz}"`;
+    console.log("Executing Blender command:", command);
+
+    const timeout = 600000;
+
+    const execPromise = new Promise((resolve, reject) => {
+      const execProcess = exec(command, (error, stdout, stderr) => {
+        if (error) {
+          console.error("❌ Blender error:", error, stderr, stdout);
+          reject({ status: 500, message: "AR logo model generation failed" });
+        } else {
+          resolve(stdout);
+        }
+      });
+
+      setTimeout(() => {
+        execProcess.kill();
+        reject({ status: 500, message: "Blender process timed out" });
+      }, timeout);
+    });
+
+    await execPromise;
+
+    if (!fs.existsSync(modelPath)) {
+      return res.status(500).json({ error: "Generated model file not found glb" });
+    }
+
+    if (!fs.existsSync(model_usdz)) {
+      return res.status(500).json({ error: "Generated model file not found usdz" });
+    }
+
+    const modelUrl = `models/${user_id}_${modelId}.glb`;
+
+    const newPhotoModel = await UpdateModel.create({
+      id: modelId,
+      user_id,
+      type_name,
+      model_path: modelUrl,
+    });
+
+    req.getIo().emit("photoModelUpdated", { id: modelId, model_path: modelUrl });
+
+    res.json({
+      success: true,
+      message: "Ar Logo model created successfully",
+      data: {
+        id: newPhotoModel.id,
+        model_path: modelUrl,
+        type_name
       },
     });
 
@@ -517,7 +615,7 @@ export const createARVideoModel = async (req, res, next) => {
 };
 
 
-// ar object model
+// ar object model 
 export const generateObjectModel = async (req, res) => {
   const { user_id } = req.body;
   const videoFile = req.file;
@@ -733,6 +831,7 @@ export const generateQrCodes = asyncErrors(async (req, res, next) => {
     tracking_pixel,
     custom_page,
     border,
+    overlay
   } = req.body;
 
   const arPhoto = req.file; // For AR Photo, the image will be in req.file (from form-data)
@@ -813,6 +912,32 @@ const modelPathusdz = path.join(uploadsDir, `${user_id}_${modelId}.usdz`);
 
     command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${photoPath}"  "${modelPath}"`;
 
+  }else if (ar_type === "AR Video") {
+    if (!arPhoto) return next(new ErrorHandler("Video is required", 400));
+
+    const photoPath = path.join(baseDir, "uploads", arPhoto.filename);
+    if (!fs.existsSync(photoPath)) {
+      return next(new ErrorHandler("Uploaded video not found", 400));
+    }
+
+    finalTypeName = arPhoto.filename;
+    const scriptPath = path.join(__dirname, "scripts", "generate_video_model.py");
+
+    command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${modelPath}" "${photoPath}"`;
+
+  } else if (ar_type === "AR Logo") {
+    if (!arPhoto) return next(new ErrorHandler("logo is required", 400));
+
+    const logoPath = path.join(baseDir, "uploads", arPhoto.filename);
+    if (!fs.existsSync(logoPath)) {
+      return next(new ErrorHandler("Uploaded logo not found", 400));
+    }
+
+    finalTypeName = arPhoto.filename;
+    const scriptPath = path.join(__dirname, "scripts", "generate_logo_model.py");
+
+   command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${logoPath}" "${depth}" "${gloss}" "${scale}" "${orientation}" "${overlay}" "${modelPath}" "${modelPathusdz}"`;
+
   } else {
     return next(new ErrorHandler("Invalid AR Type", 400));
   }
@@ -848,8 +973,8 @@ const modelPathusdz = path.join(uploadsDir, `${user_id}_${modelId}.usdz`);
 
   
   // const convertScript = path.join(__dirname, "scripts", "glbConvertToUsdz", "convert.py");
-  const modelUrl = `models/${modelId}.glb`;
-  const modelUrlusdz = `models/${modelId}.usdz`;
+  const modelUrl = `models/${user_id}_${modelId}.glb`;
+  const modelUrlusdz = `models/${user_id}_${modelId}.usdz`;
 
   // const usdzPath = modelPath.replace('.glb', '.usdz');
   // const convertCommand = `"${process.env.BLENDER_PATH}" --background --python "${convertScript}" -- "${modelPath}" "${usdzPath}"`;
@@ -891,7 +1016,8 @@ const modelPathusdz = path.join(uploadsDir, `${user_id}_${modelId}.usdz`);
     border,
     qr_code: qrCodeImage,
     model_path: modelUrl,
-    model_usdz: modelUrlusdz
+    model_usdz: modelUrlusdz,
+    overlay
   });
 
   res.json({

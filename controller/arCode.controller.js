@@ -9,18 +9,35 @@ import { exec, execSync } from 'child_process';
 import ErrorHandler from "../middleware/error.js";
 import { ArTypes } from "../model/arTypes.model.js";
 import fs from 'fs';
+import geoip from "geoip-lite";
+import { UAParser } from "ua-parser-js";
 import { UpdateModel } from "../model/tempUpdateModel.model.js";
+import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { CustomPage } from "../model/customPages.model.js";
+import { TrackingPixel } from "../model/trackingPixel.model.js";
+import { ScanLog } from "../model/scanLog.model.js";
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// const openai = new OpenAI({
+//   apiKey: process.env.OPENAI_KEY, // Replace with your real key
+// });
+
+const genAI = new GoogleGenerativeAI(process.env.OPENAI_KEY);
+
 
 // let glbPath = path.join(__dirname, "output", "147e4f26.glb");
 
 const baseDir = path.join(__dirname, "..");
 const uploadsDir = path.join(baseDir, "output");
+const uploadsDirUpload = path.join(baseDir, "uploads");
 
 // ar text model
 export const updatedModel = async (req, res, next) => {
+  // const user = req.user;
   const { type_name, font, color, depth, gloss, scale, orientation, user_id } = req.body;
 
   if (!type_name || !user_id) {
@@ -92,6 +109,7 @@ export const updatedModel = async (req, res, next) => {
     // **Save to Database**
     const newModel = await UpdateModel.create({
       id: modelId,
+      // user_id: user.id,
       user_id,
       type_name,
       model_path: modelUrl,
@@ -288,6 +306,7 @@ export const createPortalModel = async (req, res, next) => {
     res.status(error.status || 500).json({ error: error.message || "Internal server error" });
   }
 };
+
 // ar face model
 export const createFaceModel = async (req, res, next) => {
   const { user_id } = req.body;
@@ -381,7 +400,7 @@ export const createFaceModel = async (req, res, next) => {
       return res.status(500).json({ error: "Generated model file not found" });
     }
 
-    const modelUrl = `models/${modelId}.glb`;
+    const modelUrl = `models/${user_id}_${modelId}.glb`;
 
     const newFaceModel = await UpdateModel.create({
       id: modelId,
@@ -424,6 +443,7 @@ export const createFaceModel = async (req, res, next) => {
     });
   }
 };
+
 // ar video model
 export const createARVideoModel = async (req, res, next) => {
   const { user_id } = req.body;
@@ -463,7 +483,13 @@ export const createARVideoModel = async (req, res, next) => {
     const modelPath = path.join(uploadsDir, `${user_id}_${modelId}.glb`);
     const scriptPath = path.join(__dirname, "scripts", "generate_video_model.py");
 
-    const command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${modelPath}" "${videoPath}"`;
+    const defaultImage = path.join(__dirname, "..", "uploads", "my-pic.jpg");
+    if (!fs.existsSync(defaultImage)) {
+      throw new Error("Default image not found at " + defaultImage);
+    }
+
+
+    const command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${modelPath}" "${videoPath}" "${defaultImage}"`;
     console.log("Executing Blender command:", command);
 
     const timeout = 600000;
@@ -472,7 +498,7 @@ export const createARVideoModel = async (req, res, next) => {
       const execProcess = exec(command, (error, stdout, stderr) => {
         if (error) {
           console.error("❌ Blender error:", error, stderr);
-          reject({ status: 500, message: "AR photo model generation failed" });
+          reject({ status: 500, message: "AR video model generation failed" });
         } else {
           resolve(stdout);
         }
@@ -613,8 +639,138 @@ export const createARLogoModel = async (req, res, next) => {
     res.status(error.status || 500).json({ error: error.message || "Internal server error" });
   }
 };
+// ar 3d files
+export const upload3Dfiles = async (req, res, next) => {
+  const { user_id } = req.body;
+  let type_name = req.file?.filename;
 
+  if (!type_name || !user_id) {
+    return res.status(400).json({ error: "Required fields are missing" });
+  }
 
+  // Allowed 3D file extensions (lowercase)
+  const allowedExtensions = [
+    ".glb", ".usdz", ".ply", ".stl", ".fbx", ".obj", ".x3d", ".gltf", ".zip"
+  ];
+  const fileExt = path.extname(type_name).toLowerCase();
+
+  if (!allowedExtensions.includes(fileExt)) {
+    // Delete invalid file
+    const uploadedFilePath = path.join(__dirname, "..", "uploads", type_name);
+    if (fs.existsSync(uploadedFilePath)) {
+      fs.unlinkSync(uploadedFilePath);
+    }
+    return res.status(400).json({
+      error: `Invalid file type. Only these 3D formats are allowed: ${allowedExtensions.join(", ")}`
+    });
+  }
+
+  try {
+    const uploadsDir = path.join(__dirname, "..", "uploads");
+    const modelInputPath = path.join(uploadsDir, type_name);
+
+    if (!fs.existsSync(modelInputPath)) {
+      return res.status(400).json({ error: "Uploaded model file not found!" });
+    }
+
+    // Check file size (e.g., 100MB limit)
+    const stats = fs.statSync(modelInputPath);
+    const fileSizeInMB = stats.size / (1024 * 1024);
+    if (fileSizeInMB > 100) {
+      fs.unlinkSync(modelInputPath);
+      return res.status(400).json({ error: "File size exceeds 100MB limit" });
+    }
+
+    const modelId = uuid().replace(/-/g, "").substring(0, 8);
+    const tempDir = path.join(__dirname, "..", "temp");
+
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+
+    // Output paths
+    const outputGLB = path.join(tempDir, `${user_id}_${modelId}.glb`);
+    const outputUSDZ = path.join(tempDir, `${user_id}_${modelId}.usdz`);
+
+    // Python script to run Blender conversion
+    const scriptPath = path.join(__dirname, "scripts", "convert_3d_files.py");
+
+    // Blender command
+    const command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${modelInputPath}" "${outputGLB}" "${outputUSDZ}"`;
+    console.log("Executing Blender command:", command);
+
+    const timeout = 600000; // 10 minutes
+
+    const execPromise = new Promise((resolve, reject) => {
+      const execProcess = exec(command, (error, stdout, stderr) => {
+        if (error) {
+          console.error("❌ Blender error:", error, stderr, stdout);
+          reject({ status: 500, message: "3D model conversion failed: " + (stderr || stdout || error.message) });
+        } else {
+          resolve(stdout);
+        }
+      });
+
+      setTimeout(() => {
+        execProcess.kill();
+        reject({ status: 500, message: "Blender process timed out after 10 minutes" });
+      }, timeout);
+    });
+
+    await execPromise;
+
+    // Verify outputs were created
+    const glbExists = fs.existsSync(outputGLB);
+    const usdzExists = fs.existsSync(outputUSDZ);
+
+    if (!glbExists && !usdzExists) {
+      return res.status(500).json({ error: "Conversion failed - no output files were created" });
+    }
+
+    // Clean up the original uploaded file
+    fs.unlinkSync(modelInputPath);
+
+    const modelUrl = `models/${user_id}_${modelId}.glb`;
+
+    const newModel = await UpdateModel.create({
+      id: modelId,
+      user_id,
+      type_name,
+      model_path: modelUrl,
+    });
+
+    req.getIo().emit("photoModelUpdated", { id: modelId, model_path: modelUrl });
+
+    res.json({
+      success: true,
+      message: "3D model created and converted successfully",
+      data: {
+        id: newModel.id,
+        model_path: modelUrl,
+        type_name,
+        formats: {
+          glb: glbExists,
+          usdz: usdzExists
+        }
+      },
+    });
+
+  } catch (error) {
+    console.error("❌ Error:", error);
+
+    // Clean up any temporary files that might have been created
+    try {
+      if (outputGLB && fs.existsSync(outputGLB)) fs.unlinkSync(outputGLB);
+      if (outputUSDZ && fs.existsSync(outputUSDZ)) fs.unlinkSync(outputUSDZ);
+    } catch (cleanupError) {
+      console.error("Cleanup error:", cleanupError);
+    }
+
+    res.status(error.status || 500).json({
+      error: error.message || "Internal server error during 3D model processing"
+    });
+  }
+};
 // ar object model 
 export const generateObjectModel = async (req, res) => {
   const { user_id } = req.body;
@@ -628,14 +784,16 @@ export const generateObjectModel = async (req, res) => {
     const modelId = uuid().replace(/-/g, '').substring(0, 8);
     const outputDir = path.join(__dirname, '../temp');
     const outputPath = path.join(outputDir, `${user_id}_${modelId}.glb`);
-    const videoPath = path.join(videoFile.destination, videoFile.filename);
+    const outputPathUsdz = path.join(outputDir, `${user_id}_${modelId}.usdz`);
+    // const videoPath = path.join(videoFile.destination, videoFile.filename);
+    const videoPath = path.join(uploadsDirUpload, videoFile.filename);
 
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
 
     const scriptPath = path.join(__dirname, './scripts/generate_object_model.py');
-    const command = `"${process.env.PYTHON_PATH || 'python'}" "${scriptPath}" "${videoPath}" "${outputPath}"`;
+    const command = `python "${scriptPath}" "${videoPath}" "${outputPath}"`;
 
     console.log("Running command:", command);
 
@@ -656,27 +814,46 @@ export const generateObjectModel = async (req, res) => {
       }
 
       try {
-        const modelUrl = `/models/${modelId}.glb`;
+
+        if (!fs.existsSync(outputPath)) {
+          console.error("Output GLB file does not exist:", outputPath);
+          return res.status(500).json({
+            error: "Model generation failed",
+            details: stderr || stdout || "Unknown error"
+          });
+        }
+
+        // Ensure public/models directory exists
+        const publicDir = path.join(__dirname, '../../public/models');
+        if (!fs.existsSync(publicDir)) {
+          fs.mkdirSync(publicDir, { recursive: true });
+        }
+
+        // Move the file from temp to public/models
+        const finalPath = path.join(outputDir, `${user_id}_${modelId}.glb`);
+        await fs.promises.rename(outputPath, finalPath);
+        // console.log(`Moved GLB file to ${finalPath}`);
+
+        // Delete the uploaded video (optional)
+        if (fs.existsSync(videoPath)) {
+          await fs.promises.unlink(videoPath);
+        }
+
+        // Save model info to DB **after** file is successfully moved
+        const modelUrl = `models/${user_id}_${modelId}.glb`;
         await UpdateModel.create({
           id: modelId,
           user_id,
           model_path: modelUrl,
-          type_name: videoFile.originalname
+          type_name: videoFile.originalname,
         });
-
-        const publicPath = path.join(__dirname, '../../public/models');
-        if (!fs.existsSync(publicPath)) {
-          fs.mkdirSync(publicPath, { recursive: true });
-        }
-        await fs.promises.rename(outputPath, path.join(publicPath, `${modelId}.glb`));
-        await fs.promises.unlink(videoPath);
 
         return res.status(200).json({
           success: true,
           data: {
             id: modelId,
-            model_path: modelUrl
-          }
+            model_path: modelUrl,
+          },
         });
       } catch (dbError) {
         console.error("Database error:", dbError);
@@ -691,6 +868,9 @@ export const generateObjectModel = async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 };
+// Ai code
+
+
 
 export const latestModel = asyncErrors(async (req, res, next) => {
   const glbPath = path.join(uploadsDir, "updated_model.glb");
@@ -859,7 +1039,13 @@ export const generateQrCodes = asyncErrors(async (req, res, next) => {
   // const modelPath = path.join(tempDir, `${modelId}.glb`);
   // const modelPathusdz = path.join(tempDir, `${modelId}.usdz`);
   const modelPath = path.join(uploadsDir, `${user_id}_${modelId}.glb`);
-const modelPathusdz = path.join(uploadsDir, `${user_id}_${modelId}.usdz`);
+  const modelPathusdz = path.join(uploadsDir, `${user_id}_${modelId}.usdz`);
+
+  const defaultImage = path.join(__dirname, "..", "uploads", "my-pic.jpg");
+  if (!fs.existsSync(defaultImage)) {
+    throw new Error("Default image not found at " + defaultImage);
+  }
+
   let command = "";
   let finalTypeName = "";
 
@@ -899,7 +1085,7 @@ const modelPathusdz = path.join(uploadsDir, `${user_id}_${modelId}.usdz`);
 
     command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${photoPath}"  "${modelPath}" "${modelPathusdz}"`;
 
-  }else if (ar_type === "AR Face") {
+  } else if (ar_type === "AR Face") {
     if (!arPhoto) return next(new ErrorHandler("Face Portal is required", 400));
 
     const photoPath = path.join(baseDir, "uploads", arPhoto.filename);
@@ -912,7 +1098,7 @@ const modelPathusdz = path.join(uploadsDir, `${user_id}_${modelId}.usdz`);
 
     command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${photoPath}"  "${modelPath}"`;
 
-  }else if (ar_type === "AR Video") {
+  } else if (ar_type === "AR Video") {
     if (!arPhoto) return next(new ErrorHandler("Video is required", 400));
 
     const photoPath = path.join(baseDir, "uploads", arPhoto.filename);
@@ -923,7 +1109,7 @@ const modelPathusdz = path.join(uploadsDir, `${user_id}_${modelId}.usdz`);
     finalTypeName = arPhoto.filename;
     const scriptPath = path.join(__dirname, "scripts", "generate_video_model.py");
 
-    command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${modelPath}" "${photoPath}"`;
+    command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${modelPath}" "${photoPath}" "${defaultImage}" "${modelPathusdz}"`;
 
   } else if (ar_type === "AR Logo") {
     if (!arPhoto) return next(new ErrorHandler("logo is required", 400));
@@ -936,7 +1122,20 @@ const modelPathusdz = path.join(uploadsDir, `${user_id}_${modelId}.usdz`);
     finalTypeName = arPhoto.filename;
     const scriptPath = path.join(__dirname, "scripts", "generate_logo_model.py");
 
-   command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${logoPath}" "${depth}" "${gloss}" "${scale}" "${orientation}" "${overlay}" "${modelPath}" "${modelPathusdz}"`;
+    command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${logoPath}" "${depth}" "${gloss}" "${scale}" "${orientation}" "${overlay}" "${modelPath}" "${modelPathusdz}"`;
+
+  } else if (ar_type === "3D File") {
+    if (!arPhoto) return next(new ErrorHandler("3D file is required", 400));
+
+    const filePath = path.join(baseDir, "uploads", arPhoto.filename);
+    if (!fs.existsSync(filePath)) {
+      return next(new ErrorHandler("Uploaded logo not found", 400));
+    }
+
+    finalTypeName = arPhoto.filename;
+    const scriptPath = path.join(__dirname, "scripts", "convert_3d_files.py");
+
+    command = `"${process.env.BLENDER_PATH}" --background --python "${scriptPath}" -- "${filePath}" "${modelPath}" "${modelPathusdz}"`;
 
   } else {
     return next(new ErrorHandler("Invalid AR Type", 400));
@@ -947,7 +1146,7 @@ const modelPathusdz = path.join(uploadsDir, `${user_id}_${modelId}.usdz`);
   const execPromise = new Promise((resolve, reject) => {
     const process = exec(command, (error, stdout, stderr) => {
       if (error) {
-        console.error("❌ Blender Error:", error, stderr);
+        console.error("❌ Blender Error:", error, stderr, stdout);
         reject(new ErrorHandler("Blender model generation failed", 500));
       } else {
         resolve(stdout);
@@ -962,16 +1161,16 @@ const modelPathusdz = path.join(uploadsDir, `${user_id}_${modelId}.usdz`);
 
   await execPromise;
 
-  
+
   if (!fs.existsSync(modelPath)) {
     return next(new ErrorHandler("Model not found after generation glb", 500));
   }
-  
+
   if (!fs.existsSync(modelPathusdz)) {
     return next(new ErrorHandler("Model not found after generation usdz", 500));
   }
 
-  
+
   // const convertScript = path.join(__dirname, "scripts", "glbConvertToUsdz", "convert.py");
   const modelUrl = `models/${user_id}_${modelId}.glb`;
   const modelUrlusdz = `models/${user_id}_${modelId}.usdz`;
@@ -1032,6 +1231,115 @@ const modelPathusdz = path.join(uploadsDir, `${user_id}_${modelId}.usdz`);
     },
   });
 });
+// AI Code qr genration
+export const generateAICodeQrCode = asyncErrors(async (req, res, next) => {
+  const {
+    type_name,
+    reference_name,
+    content,
+    user_id,
+    url,
+    password,
+    tracking_pixel,
+    custom_page,
+    ar_type
+  } = req.body;
+
+  if (!user_id || !type_name || !ar_type) {
+    return next(new ErrorHandler("Required fields are missing", 400));
+  }
+
+  if (ar_type !== "AI Code") {
+    return next(new ErrorHandler("AR Type mismatch!", 400));
+  }
+
+  const modelId = uuid().replace(/-/g, "").substring(0, 8);
+
+  const qrCodeUrl = `${process.env.FRONTEND_URL}ar-text/${modelId}`;
+  const qrCodeImage = await QRCode.toDataURL(qrCodeUrl);
+
+  const newAR = await ArTypes.create({
+    id: modelId,
+    type_name,
+    ar_type,
+    reference_name,
+    content,
+    url,
+    password,
+    tracking_pixel,
+    custom_page,
+    user_id,
+    qr_code: qrCodeImage
+  });
+
+  res.json({
+    success: true,
+    message: "AI Code QR Code created",
+    data: {
+      id: newAR.id,
+      type_name,
+      qr_code: qrCodeImage,
+      qr_code_url: qrCodeUrl
+    },
+  });
+});
+// AI Code analyze Image
+const cleanGeminiResponse = (text) => {
+  return text
+    .replace(/\*\*/g, '')   // remove bold
+    .replace(/\*/g, '')     // remove asterisks
+    .replace(/\\n/g, ' ')   // remove \n characters
+    .replace(/\s+/g, ' ')   // remove extra whitespace
+    .trim();
+};
+
+export const AnalyzeAiImageAICode = async (req, res) => {
+  const { imageBase64, prompt } = req.body;
+
+  if (!imageBase64 || !prompt) {
+    return res.status(400).json({ error: 'Image and prompt are required' });
+  }
+
+  try {
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' }); // or gemini-1.5-pro
+
+    const promptInstruction = `You are an expert visual AI analyst.
+
+Analyze the image carefully and look for the following keyword(s): ${prompt}.
+
+If any of the keywords are found in the image, explain only those matched items in a clear and detailed way. Include what the object is, where it's typically found, its common uses, and any interesting facts about it.
+
+Make sure the explanation is written in natural, clean language without using any formatting symbols like *, **, -, or line breaks. Just return plain readable text in a paragraph format. Do not mention anything that is not present in the image.`
+
+    const result = await model.generateContent({
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: promptInstruction },
+            { inlineData: { mimeType: 'image/jpeg', data: imageBase64.replace(/^data:image\/\w+;base64,/, '') } },
+          ],
+        },
+      ],
+    });
+
+    const rawAnalysis = result.response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const analysis = cleanGeminiResponse(rawAnalysis);
+
+    res.json({
+      success: true,
+      message: 'Image analyzed successfully with Gemini',
+      matched: true,
+      analysis,
+    });
+
+  } catch (error) {
+    console.error('Gemini analysis error:', error);
+    return res.status(500).json({ error: 'Gemini analysis failed', details: error.message });
+  }
+};
+
+
 // get single model view
 export const arModelView = asyncErrors(async (req, res, next) => {
   try {
@@ -1076,5 +1384,204 @@ export const userArModels = asyncErrors(async (req, res, next) => {
     });
   }
 });
+
+// qr_scan count
+export const trackQrCodeScan = asyncErrors(async (req, res, next) => {
+  const { modelId } = req.params;
+
+  const arItem = await ArTypes.findOne({ where: { id: modelId } });
+
+  if (!arItem) {
+    return next(new ErrorHandler("QR Code not found", 404));
+  }
+
+  // Increment scan count
+  arItem.scan_count += 1;
+  await arItem.save();
+
+  res.status(200).json({
+    success: true,
+    message: "QR Code scan tracked",
+    arItem
+  });
+});
+// single model delete qr
+export const qrdelete = asyncErrors(async (req, res, next) => {
+  const { id } = req.params;
+
+  const model = await ArTypes.findOne({ where: { id } });
+
+  if (!model) {
+    return next(new ErrorHandler("Model not found in the database", 404));
+  }
+
+  await model.destroy();
+
+  res.json({
+    success: true,
+    message: "Model deleted successfully",
+  });
+});
+
+
+
+// custom pages
+export const createCustomPage = asyncErrors(async (req, res, next) => {
+  const { id } = req.user;
+  const {
+    reference_name,
+    website_url,
+    custom_title,
+    custom_message,
+  } = req.body;
+
+  // File upload fields from multipart/form-data
+  const custom_logo = req.files?.custom_logo?.[0]?.filename || null;
+  const banner = req.files?.banner?.[0]?.filename || null;
+
+  const user_id = id;
+
+  // Basic validation
+  if (!reference_name || !website_url || !custom_title || !custom_message || !user_id) {
+    return next(new ErrorHandler("All fields are required!", 400));
+  }
+
+  const customPage = await CustomPage.create({
+    reference_name,
+    website_url,
+    custom_logo,
+    banner,
+    custom_title,
+    custom_message,
+    user_id
+  });
+
+  res.status(201).json({
+    success: true,
+    message: "Custom Page created successfully",
+    data: customPage
+  });
+});
+
+export const allcustomPages = asyncErrors(async (req, res, next) => {
+  const user_id = req.user.id;
+
+  if (!user_id) {
+    return next(new ErrorHandler("User ID is required", 400));
+  }
+
+  const pages = await CustomPage.findAll({
+    where: { user_id }
+  });
+
+  res.status(200).json({
+    success: true,
+    count: pages.length,
+    data: pages,
+  });
+})
+
+
+// tracking pixel
+export const createTrackingPixel = asyncErrors(async (req, res, next) => {
+  const { id } = req.user;
+  const {
+    provider,
+    name,
+    code
+  } = req.body;
+
+  const user_id = id;
+
+  // Basic validation
+  if (!provider || !name || !code || !user_id) {
+    return next(new ErrorHandler("All fields are required!", 400));
+  }
+
+  const tracking = await TrackingPixel.create({
+    provider,
+    name,
+    code,
+    user_id
+  });
+
+  res.status(200).json({
+    success: true,
+    message: "Tracking add successfully",
+    data: tracking
+  });
+});
+
+export const allTrackingPixel = asyncErrors(async (req, res, next) => {
+  const user_id = req.user.id;
+
+  if (!user_id) {
+    return next(new ErrorHandler("User ID is required", 400));
+  }
+
+  const pixels = await TrackingPixel.findAll({
+    where: { user_id }
+  });
+
+  res.status(200).json({
+    success: true,
+    count: pixels.length,
+    data: pixels,
+  });
+})
+
+export const deleteTrackingPixel = asyncErrors(async (req, res, next) => {
+  const { pixel_id } = req.params;
+
+  const pixel = await TrackingPixel.findOne({ where: { id: pixel_id } });
+
+  if (!pixel) {
+    return next(new ErrorHandler("pixel not found in the database", 404));
+  }
+
+  await pixel.destroy();
+
+  res.json({
+    success: true,
+    message: "pixel deleted successfully",
+  });
+});
+
+export const saveScanLog = asyncErrors(async (req, res, next) => {
+  const { page_id } = req.params;
+
+  const ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
+  const geo = geoip.lookup(ip);
+  const ua = new UAParser(req.headers['user-agent']);
+  const browser = ua.getBrowser().name || "Other";
+  const os = ua.getOS().name || "Other";
+  const device = ua.getDevice().type || "Other";
+
+  const custom_page = await CustomPage.findOne({ where: { id: page_id } });
+
+  if (!custom_page) {
+    return next(new ErrorHandler("custom_page not found in the database", 404));
+  }
+
+  const scan = await ScanLog.create({
+    custom_page_id: page_id,
+    device,
+    browser,
+    os,
+    ip_address: ip,
+    country: geo?.country || "Unknown",
+    city: geo?.city || "Unknown"
+  });
+
+  res.status(200).json({ success: true, data: scan });
+});
+
+// key generate
+
+
+
+
+
+
 
 

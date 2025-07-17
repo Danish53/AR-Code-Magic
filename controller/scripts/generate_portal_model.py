@@ -243,19 +243,23 @@ def main():
             tex_coord = nodes.new('ShaderNodeTexCoord')
             mapping = nodes.new('ShaderNodeMapping')
             tex_image = nodes.new('ShaderNodeTexImage')
-            emission = nodes.new('ShaderNodeEmission')
+            # emission = nodes.new('ShaderNodeEmission')
+            # output = nodes.new('ShaderNodeOutputMaterial')
+            bsdf = nodes.new('ShaderNodeBsdfPrincipled')
             output = nodes.new('ShaderNodeOutputMaterial')
 
             tex_image.image = img
             tex_image.interpolation = 'Smart'
             mapping.inputs['Rotation'].default_value[0] = radians(90)
             mapping.inputs['Rotation'].default_value[2] = radians(180)
-            emission.inputs['Strength'].default_value = 2.0
+            # emission.inputs['Strength'].default_value = 2.0
 
             links.new(tex_coord.outputs['Generated'], mapping.inputs['Vector'])
             links.new(mapping.outputs['Vector'], tex_image.inputs['Vector'])
-            links.new(tex_image.outputs['Color'], emission.inputs['Color'])
-            links.new(emission.outputs['Emission'], output.inputs['Surface'])
+            # links.new(tex_image.outputs['Color'], emission.inputs['Color'])
+            # links.new(emission.outputs['Emission'], output.inputs['Surface'])
+            links.new(tex_image.outputs['Color'], bsdf.inputs['Base Color'])
+            links.new(bsdf.outputs['BSDF'], output.inputs['Surface'])
 
             sphere.data.materials.append(mat)
         except Exception as e:

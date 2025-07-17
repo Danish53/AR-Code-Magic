@@ -81,8 +81,13 @@ const ArTypes = sequelize.define(
     model_usdz: {
       type: DataTypes.STRING,
     },
-    overlay:{
+    overlay: {
       type: DataTypes.INTEGER,
+    },
+    scan_count: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
     }
   },
   {

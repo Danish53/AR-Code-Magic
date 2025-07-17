@@ -14,18 +14,18 @@ const Users = sequelize.define(
     user_name: {
       type: DataTypes.STRING,
       allowNull: false,
-      unique: true,
+      // unique: true,
     },
     email: {
       type: DataTypes.STRING,
       allowNull: false,
-      unique: true,
+      // unique: true,
       validate: {
         isEmail: true,
       },
     },
     role: {
-      type: DataTypes.ENUM("admin", "user"),
+      type: DataTypes.ENUM("admin", "user", "team_member"),
       allowNull: false,
       defaultValue: "user",
     },
@@ -47,6 +47,12 @@ const Users = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
       defaultValue: 0,
+    },
+    package_id: {
+      type: DataTypes.INTEGER,
+    },
+    api_key: {
+      type: DataTypes.STRING,
     }
   },
 
@@ -68,6 +74,7 @@ const Users = sequelize.define(
       },
     },
     timestamps: true,
+    indexes: [],
   }
 );
 
@@ -76,7 +83,7 @@ Users.prototype.comparePassword = async function (enteredPassword) {
 };
 
 Users.prototype.getJWTToken = function () {
-  return jwt.sign( 
+  return jwt.sign(
     { id: this.id, email: this.email },
     process.env.JWT_SECRET_KEY,
     {

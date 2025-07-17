@@ -7,7 +7,11 @@ import { AdminSettings } from "../model/settings.model.js";
 import nodemailer from "nodemailer";
 import bcrypt from "bcrypt";
 import { Packages } from "../model/packages.model.js";
+import crypto from "crypto";
 
+export const generateApiKey = () => {
+  return "arcoded_pk_" + crypto.randomBytes(12).toString("hex");
+};
 // Auth User
 export const register = asyncErrors(async (req, res, next) => {
   const { user_name, email, password, confirm_password } = req.body;
@@ -17,9 +21,7 @@ export const register = asyncErrors(async (req, res, next) => {
   }
 
   if (user_name.length < 3) {
-    return next(
-      new ErrorHandler("Username must contain at least 3 characters!", 400)
-    );
+    return next(new ErrorHandler("Username must contain at least 3 characters!", 400));
   }
 
   if (password !== confirm_password) {
@@ -27,23 +29,31 @@ export const register = asyncErrors(async (req, res, next) => {
   }
 
   try {
-    let userEmail = await Users.findOne({ where: { email } });
-    if (userEmail) {
+    // Check duplicate
+    const [userEmail, userName] = await Promise.all([
+      Users.findOne({ where: { email } }),
+      Users.findOne({ where: { user_name } })
+    ]);
+
+    if (userEmail || userName) {
       return next(new ErrorHandler("User already exists!", 400));
     }
 
-    let userName = await Users.findOne({ where: { user_name } });
-    if (userName) {
-      return next(new ErrorHandler("User already exists!", 400));
+    // Find Basic Plan
+    const basicPlan = await Packages.findOne({ where: { package_name: "Basic" } });
+
+    if (!basicPlan) {
+      return next(new ErrorHandler("Basic package not found", 500));
     }
 
+    // Create user with Basic Plan
     const user = await Users.create({
       user_name,
       email,
       password,
+      package_id: basicPlan.id, // must exist in Users model
+      isTrial: 1,
     });
-
-    await user.save();
 
     sendToken(user, 200, "User registered successfully!", res);
   } catch (error) {
@@ -253,7 +263,7 @@ export const resetPassword = asyncErrors(async (req, res, next) => {
 export const profileSettings = asyncErrors(async (req, res, next) => {
   const { user_name, email, password, confirm_password } = req.body;
 
-  if(!user_name){
+  if (!user_name) {
     return next(new ErrorHandler("Please enter user name!", 400));
   }
   try {
@@ -268,10 +278,10 @@ export const profileSettings = asyncErrors(async (req, res, next) => {
       await user.save({ hooks: false });
     }
 
-    
-  if (password !== confirm_password) {
-    return next(new ErrorHandler("Passwords do not match!", 400));
-  }
+
+    if (password !== confirm_password) {
+      return next(new ErrorHandler("Passwords do not match!", 400));
+    }
 
     user.user_name = user_name;
     user.email = email;
@@ -325,6 +335,28 @@ export const packages = asyncErrors(async (req, res, next) => {
     res.status(500).json({
       success: false,
       message: "Internal Server Error",
+    });
+  }
+});
+
+// generate api key
+export const apiKeyGenerate = asyncErrors(async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const newApiKey = generateApiKey();
+
+    await Users.update({ api_key: newApiKey }, { where: { id: userId } });
+
+    res.status(200).json({
+      success: true,
+      message: "API key generated successfully",
+      api_key: newApiKey,
+    });
+  } catch (error) {
+    console.error("API Key Generation Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to generate API key",
     });
   }
 });

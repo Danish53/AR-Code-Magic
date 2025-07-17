@@ -8,22 +8,31 @@ import { Orders } from "./orders.model.js";
 import { StripeKeys } from "./stripeKeys.model.js";
 import { ArTypes } from "./arTypes.model.js";
 import { UpdateModel } from "./tempUpdateModel.model.js";
+import { CustomPage } from "./customPages.model.js"
+import { TrackingPixel } from "./trackingPixel.model.js"
+import { ScanLog } from "./scanLog.model.js"
+import { TeamMember } from "./teamMembers.model.js"
 
 Users.hasMany(Packages, {
   foreignKey: "added_by",
+  constraints: false,
   as: "packages",
 });
 Packages.belongsTo(Users, {
   foreignKey: "added_by",
+  constraints: false,
   as: "users",
 });
 Users.hasMany(ArTypes, {
   foreignKey: "user_id",
+  constraints: false,
   as: "artypes",
 });
 ArTypes.belongsTo(Users, {
   foreignKey: "user_id",
+  constraints: false,
   as: "users",
 });
 
-export { sequelize, Users, Packages, AdminSettings, blogCategories, blogs, Orders, StripeKeys, ArTypes, UpdateModel };
+
+export { sequelize, Users, Packages, AdminSettings, blogCategories, blogs, Orders, StripeKeys, ArTypes, UpdateModel, CustomPage, TrackingPixel, ScanLog, TeamMember };

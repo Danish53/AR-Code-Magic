@@ -10,7 +10,14 @@ const blogs = sequelize.define(
       primaryKey: true,
     },
     blog_category: {
-      type: DataTypes.STRING,
+      type: DataTypes.INTEGER, // 🔥 Must match blogCategories.id type
+      allowNull: true,
+      references: {
+        model: "blogCategories", // table name (not variable)
+        key: "id",
+      },
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     },
     blog_title: {
       type: DataTypes.STRING,

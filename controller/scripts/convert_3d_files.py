@@ -8,11 +8,6 @@ input_path = argv[0]
 output_glb_path = argv[1]
 output_usdz_path = argv[2]
 
-# Debug
-print(f"📥 Input File: {input_path}")
-print(f"📤 Output GLB: {output_glb_path}")
-print(f"📤 Output USDZ: {output_usdz_path}")
-
 # Clear current Blender scene
 bpy.ops.wm.read_factory_settings(use_empty=True)
 

@@ -4,16 +4,37 @@ import ErrorHandler from "./error.js";
 import { Users } from "../model/user.model.js";
 
 //AUTHENTICATION
+// export const isAuthenticated = asyncErrors(async (req, res, next) => {
+//   const token =
+//     req.cookies.token ||
+//     (req.headers.authorization && req.headers.authorization.split(" ")[1]);
+//   if (!token) {
+//     return next(new ErrorHandler("User is not authenticated!", 400));
+//   }
+//   const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+
+//   req.user = await Users.findByPk(decoded.id);
+
+//   next();
+// });
 export const isAuthenticated = asyncErrors(async (req, res, next) => {
   const token =
     req.cookies.token ||
     (req.headers.authorization && req.headers.authorization.split(" ")[1]);
+
   if (!token) {
     return next(new ErrorHandler("User is not authenticated!", 400));
   }
+
   const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
 
-  req.user = await Users.findByPk(decoded.id);
+  const user = await Users.findByPk(decoded.id);
+
+  if (!user) {
+    return next(new ErrorHandler("User not found!", 404));
+  }
+
+  req.user = user;
 
   next();
 });

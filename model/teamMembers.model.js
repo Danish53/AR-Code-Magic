@@ -23,6 +23,17 @@ const TeamMember = sequelize.define("teammembers", {
     type: DataTypes.ENUM("pending", "accepted"),
     defaultValue: "pending",
   },
+  permissions: {
+    type: DataTypes.JSON,
+    defaultValue: {
+      arText: false,
+      arPhoto: false,
+      arPortal: false,
+      arLogo: false,
+      arCode: false,
+      File3D: false,
+    },
+  },
 });
 
 export { TeamMember };

@@ -1,4 +1,4 @@
-import { Op } from "sequelize";
+import { Op, where } from "sequelize";
 import { asyncErrors } from "../middleware/asyncErrors.js";
 import ErrorHandler from "../middleware/error.js";
 import { Users } from "../model/user.model.js";
@@ -8,9 +8,10 @@ import nodemailer from "nodemailer";
 import bcrypt from "bcrypt";
 import { Packages } from "../model/packages.model.js";
 import crypto from "crypto";
+import { TeamMember } from "../model/teamMembers.model.js";
 
 export const generateApiKey = () => {
-  return "arcoded_pk_" + crypto.randomBytes(12).toString("hex");
+  return "arcoded_pk_" + crypto.randomBytes(6).toString("hex");
 };
 // Auth User
 export const register = asyncErrors(async (req, res, next) => {
@@ -39,20 +40,21 @@ export const register = asyncErrors(async (req, res, next) => {
       return next(new ErrorHandler("User already exists!", 400));
     }
 
-    // Find Basic Plan
-    const basicPlan = await Packages.findOne({ where: { package_name: "Basic" } });
+    const basicPlan = await Packages.findOne({ where: { package_name: "Trial" } });
 
     if (!basicPlan) {
-      return next(new ErrorHandler("Basic package not found", 500));
+      return next(new ErrorHandler("Trial package not found", 500));
     }
 
-    // Create user with Basic Plan
+    const apiKey = generateApiKey();
+
     const user = await Users.create({
       user_name,
       email,
       password,
-      package_id: basicPlan.id, // must exist in Users model
+      package_id: basicPlan.id,
       isTrial: 1,
+      api_key: apiKey,
     });
 
     sendToken(user, 200, "User registered successfully!", res);
@@ -83,6 +85,63 @@ export const login = asyncErrors(async (req, res, next) => {
   }
 
   sendToken(user, 200, "User logged in successfully!", res);
+});
+export const getProfile = asyncErrors(async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    // Fetch the logged-in user
+    const user = await Users.findOne({
+      where: { id: userId },
+      include: [
+        {
+          model: Packages,
+          as: "plan",
+        },
+      ],
+    });
+
+    if (!user) {
+      return next(new ErrorHandler("User not found", 404));
+    }
+
+    // Default response object
+    let profileData = {
+      user,
+      owner: null,
+    };
+
+    // ✅ If this user is a team member, fetch their owner's info
+    if (user.role === "team_member") {
+      const teamLink = await TeamMember.findOne({
+        where: { member_id: user.id },
+      });
+
+      if (teamLink) {
+        const owner = await Users.findOne({
+          where: { id: teamLink.owner_id },
+          include: [
+            {
+              model: Packages,
+              as: "plan",
+            },
+          ],
+        });
+
+        if (owner) {
+          profileData.owner = owner;
+        }
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile fetched successfully",
+      user: profileData,
+    });
+  } catch (error) {
+    return next(new ErrorHandler(error.message, 500));
+  }
 });
 export const forgotPassword = asyncErrors(async (req, res, next) => {
   const { email } = req.body;

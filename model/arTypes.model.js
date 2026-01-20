@@ -60,7 +60,7 @@ const ArTypes = sequelize.define(
       type: DataTypes.STRING,
     },
     tracking_pixel: {
-      type: DataTypes.STRING,
+      type: DataTypes.JSON,
     },
     custom_page: {
       type: DataTypes.STRING,

@@ -15,7 +15,7 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import http from "http";
 
-import { Server } from "socket.io"; 
+import { Server } from "socket.io";
 
 
 const app = express();
@@ -26,13 +26,21 @@ const __dirname = dirname(__filename);
 
 dotenv.config({ path: ".env" });
 
+// app.use(
+//   cors({
+//     origin: process.env.FRONTEND,
+//     methods: ["GET", "PUT", "DELETE", "POST", "PATCH"],
+//     credentials: true,
+//   })
+// );
 app.use(
   cors({
-    origin: process.env.FRONTEND,
+    origin: "*",
     methods: ["GET", "PUT", "DELETE", "POST", "PATCH"],
     credentials: true,
   })
 );
+
 
 const io = new Server(server, {
   cors: {
@@ -57,7 +65,7 @@ io.on("connection", (socket) => {
 
 
 app.use(cookieParser());
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 app.use(compression());
 app.use(express.urlencoded({ limit: "16kb", extended: true }));
 app.use(express.static("public"));
@@ -68,7 +76,7 @@ app.use("/models", express.static(path.join(__dirname, "temp")));
 
 app.use(
   session({
-    secret: "dhfhheewwqqh84883ddnewead", 
+    secret: "dhfhheewwqqh84883ddnewead",
     resave: false,
     saveUninitialized: true,
     cookie: { secure: false },

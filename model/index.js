@@ -23,6 +23,11 @@ Packages.belongsTo(Users, {
   constraints: false,
   as: "users",
 });
+Users.belongsTo(Packages, {
+  foreignKey: "package_id",
+  constraints: false,
+  as: "plan",
+});
 Users.hasMany(ArTypes, {
   foreignKey: "user_id",
   constraints: false,
@@ -33,6 +38,17 @@ ArTypes.belongsTo(Users, {
   constraints: false,
   as: "users",
 });
+blogs.belongsTo(blogCategories, {
+  foreignKey: "blog_category",
+  as: "category",
+});
+
+blogCategories.hasMany(blogs, {
+  foreignKey: "blog_category",
+  as: "blogs",
+});
+
+
 
 
 export { sequelize, Users, Packages, AdminSettings, blogCategories, blogs, Orders, StripeKeys, ArTypes, UpdateModel, CustomPage, TrackingPixel, ScanLog, TeamMember };

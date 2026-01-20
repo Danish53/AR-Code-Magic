@@ -22,7 +22,16 @@ export const getCategories = asyncErrors(async (req, res, next) => {
 // all blogs
 export const getAllBlogs = asyncErrors(async (req, res, next) => {
   try {
-    const blog = await blogs.findAll();
+    const blog = await blogs.findAll({
+      include: [
+        {
+          model: blogCategories,
+          as: "category",
+          attributes: ["id", "category_name"], // only fetch these fields
+        },
+      ],
+    });
+
     res.status(200).json({
       success: true,
       message: "Blogs fetched successfully!",
@@ -45,7 +54,7 @@ export const blogSearch = asyncErrors(async (req, res, next) => {
       },
     });
 
-    if(!blog || blog.length === 0) {
+    if (!blog || blog.length === 0) {
       return next(new ErrorHandler("No blog found!", 404));
     }
 

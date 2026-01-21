@@ -1,65 +1,34 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>3D Model Updater</title>
+  <title>AR Coded</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r146/three.min.js"></script>
-</head>
-<body>
-  <div>
-    <input type="text" id="text-input" placeholder="Enter text">
-    <button id="update-button">Update Model</button>
-  </div>
-  <canvas id="canvas"></canvas>
-
-  <script>
-    const socket = io("http://localhost:8000");
-
-    // Three.js setup
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("canvas") });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-
-    let model;
-
-    // Load initial GLB model
-    const loader = new THREE.GLTFLoader();
-    loader.load("http://localhost:8000/models/147e4f26.glb", (gltf) => {
-      model = gltf.scene;
-      scene.add(model);
-    });
-
-    // Handle model updates via WebSocket
-    socket.on("model_update", (data) => {
-      const blob = new Blob([data], { type: "model/gltf-binary" });
-      const url = URL.createObjectURL(blob);
-
-      loader.load(url, (gltf) => {
-        scene.remove(model);
-        model = gltf.scene;
-        scene.add(model);
-      });
-    });
-
-    // Update model on button click
-    document.getElementById("update-button").addEventListener("click", () => {
-      const text = document.getElementById("text-input").value;
-      fetch("api/v1/user/update-model", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type_name: text }),
-      });
-    });
-
-    // Render loop
-    function animate() {
-      requestAnimationFrame(animate);
-      renderer.render(scene, camera);
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background-color: #f0f0f0;
     }
-    animate();
-  </script>
+
+    #app {
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app">
+    <h1>Welcome to AR Coded</h1>
+    <p>AR Coded application.</p>
+  </div>
 </body>
+
 </html>

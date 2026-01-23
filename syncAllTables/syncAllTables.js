@@ -6,8 +6,8 @@ export const syncAllTables = async (req, res) => {
     await Users.sync({ alter: true });
     await AdminSettings.sync({ alter: true });
     await Packages.sync({ alter: true });
-    await blogCategories.sync({ alter: true });
-    await blogs.sync({ alter: true });
+    await blogCategories.sync({ force: true });
+    await blogs.sync({ force: true });
     await Orders.sync({ alter: true });
     await StripeKeys.sync({ alter: true });
     await ArTypes.sync({ alter: true });

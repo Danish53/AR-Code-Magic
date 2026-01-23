@@ -5,7 +5,7 @@ const blogCategories = sequelize.define(
   "blogCategories",
   {
     id: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.INTEGER.UNSIGNED,
       autoIncrement: true,
       primaryKey: true,
     },
@@ -22,6 +22,7 @@ const blogCategories = sequelize.define(
   },
   {
     timestamps: true,
+    freezeTableName: true,
   }
 );
 

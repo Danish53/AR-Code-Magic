@@ -5,12 +5,12 @@ const blogs = sequelize.define(
   "blogs",
   {
     id: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.INTEGER.UNSIGNED,
       autoIncrement: true,
       primaryKey: true,
     },
     blog_category: {
-      type: DataTypes.INTEGER, // 🔥 Must match blogCategories.id type
+      type: DataTypes.INTEGER.UNSIGNED, // 🔥 Must match blogCategories.id type
       allowNull: true,
       references: {
         model: "blogCategories", // table name (not variable)
@@ -34,6 +34,7 @@ const blogs = sequelize.define(
   },
   {
     timestamps: true,
+    freezeTableName: true,
   }
 );
 
